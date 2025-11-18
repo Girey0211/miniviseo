@@ -47,8 +47,16 @@ cd ai-assistant
 uv run python src/app.py
 ```
 
+또는:
+
+```bash
+cd ai-assistant
+python -m src.app
+```
+
 대화형 모드에서 사용 가능한 명령:
 - `/help` - 도움말 보기
+- `/debug` - 디버그 모드 토글 (로그 파일 경로 표시)
 - `/exit` - 종료
 
 ### 단위 테스트 실행
@@ -79,19 +87,23 @@ python src/app.py
 - **일정**: 일정 조회, 일정 추가 (Notion 또는 mock)
 - **웹 검색**: HTTP 요청 및 검색
 
-## Notion 통합 (선택사항)
+## Notion 통합 (필수 - 일정 기능)
 
-일정 관리 기능을 Notion과 연동할 수 있습니다:
+일정 관리 기능은 Notion API를 사용합니다:
 
 1. Notion Integration 생성: https://www.notion.so/my-integrations
 2. Database 생성 및 Integration 연결
-3. `.env` 파일에 설정 추가:
+3. Database에 다음 속성 추가:
+   - `Title` (제목) - Title 타입
+   - `Date` (날짜) - Date 타입
+   - `Description` (설명) - Text 타입
+4. `.env` 파일에 설정 추가:
    ```
    NOTION_API_KEY=secret_your_integration_token
    NOTION_DATABASE_ID=your_database_id
    ```
 
-Notion이 설정되지 않은 경우 자동으로 로컬 JSON 파일 기반 mock으로 동작합니다.
+Notion이 설정되지 않은 경우 일정 기능 사용 시 에러 메시지가 표시됩니다.
 
 ## 예시 명령어
 
@@ -125,13 +137,12 @@ ai-assistant/
 │  │  └─ tools/                 # MCP 툴 구현
 │  │     ├─ file_manager.py     # 파일 시스템
 │  │     ├─ notes.py            # 메모 저장
-│  │     ├─ calendar_mock.py    # Mock 일정
 │  │     ├─ notion_calendar.py  # Notion 일정
 │  │     └─ http_fetcher.py     # HTTP 요청
 │  ├─ data/                     # 데이터 저장소
-│  │  ├─ notes.json             # 메모 데이터
-│  │  └─ calendar.json          # Mock 일정 데이터
+│  │  └─ notes.json             # 메모 데이터
 │  └─ utils/                    # 유틸리티
+│     └─ logger.py              # 로깅 설정
 ├─ tests/                       # 테스트 코드
 ├─ logs/                        # 로그 파일
 └─ .env                         # 환경 변수
@@ -143,8 +154,27 @@ ai-assistant/
 - ✅ Phase 1.5: Agent Router (Intent → Agent 매핑)
 - ✅ Phase 2: Agents 구현 (File, Note, Calendar, Web, Fallback)
 - ✅ Phase 2.5: MCP Layer (Tools 구현 + Notion 통합)
-- ⏳ Phase 3: E2E Integration
-- ⏳ Phase 3.5: CLI
-- ⏳ Phase 4: Logging & Error Handling
-- ⏳ Phase 5: Testing & Validation
-- ⏳ Phase 6: Documentation & Deployment
+- ✅ Phase 3: E2E Integration (완전한 파이프라인)
+- ✅ Phase 3.5: CLI (대화형 인터페이스)
+- ✅ Phase 4: Logging & Error Handling (loguru 기반)
+- ✅ Phase 5: Testing & Validation (112개 테스트 통과)
+- ✅ Phase 6: Documentation & Deployment
+
+## 테스트 현황
+
+- **총 112개 테스트 모두 통과** ✅
+- Parser 테스트: 13개
+- Agent 테스트: 26개
+- MCP Tools 테스트: 22개
+- Router 테스트: 23개
+- Notion 통합 테스트: 5개
+- E2E 통합 테스트: 18개 (10개 샘플 문장 포함)
+
+## 로깅
+
+애플리케이션 로그는 `logs/assistant.log`에 저장됩니다:
+- 자동 rotation (10MB)
+- 7일간 보관
+- 압축 저장 (zip)
+
+디버그 모드(`/debug`)를 활성화하면 로그 파일 경로가 표시됩니다.
