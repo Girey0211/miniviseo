@@ -92,7 +92,7 @@ async def list_events(range_start: Optional[str] = None, range_end: Optional[str
             
             if range_start:
                 filter_conditions.append({
-                    "property": "Date",
+                    "property": "날짜",  # Korean property name
                     "date": {
                         "on_or_after": range_start
                     }
@@ -100,21 +100,24 @@ async def list_events(range_start: Optional[str] = None, range_end: Optional[str
             
             if range_end:
                 filter_conditions.append({
-                    "property": "Date",
+                    "property": "날짜",  # Korean property name
                     "date": {
                         "on_or_before": range_end
                     }
                 })
             
             # Query database using direct HTTP request
-            body = {
-                "sorts": [
+            # Try to sort by date property (support both Korean and English names)
+            body = {}
+            
+            # Only add sorts if we're not filtering (Notion API limitation)
+            if not filter_conditions:
+                body["sorts"] = [
                     {
-                        "property": "Date",
+                        "property": "날짜",  # Korean property name
                         "direction": "ascending"
                     }
                 ]
-            }
             
             if filter_conditions:
                 if len(filter_conditions) == 1:
@@ -146,14 +149,14 @@ async def list_events(range_start: Optional[str] = None, range_end: Optional[str
         for page in response.get("results", []):
             properties = page.get("properties", {})
             
-            # Extract title
-            title_prop = properties.get("Name") or properties.get("Title") or properties.get("이름")
+            # Extract title (Korean property name)
+            title_prop = properties.get("이름") or properties.get("Name") or properties.get("Title")
             title = ""
             if title_prop and title_prop.get("title"):
                 title = "".join([t.get("plain_text", "") for t in title_prop["title"]])
             
-            # Extract date
-            date_prop = properties.get("Date") or properties.get("날짜")
+            # Extract date (Korean property name)
+            date_prop = properties.get("날짜") or properties.get("Date")
             date = ""
             time = ""
             if date_prop and date_prop.get("date"):
@@ -164,11 +167,12 @@ async def list_events(range_start: Optional[str] = None, range_end: Optional[str
                     date, time = date.split("T")
                     time = time[:5]  # HH:MM
             
-            # Extract description
-            description_prop = properties.get("Description") or properties.get("설명")
+            # Extract tags (Korean property name)
+            tags_prop = properties.get("태그") or properties.get("Tags")
             description = ""
-            if description_prop and description_prop.get("rich_text"):
-                description = "".join([t.get("plain_text", "") for t in description_prop["rich_text"]])
+            if tags_prop and tags_prop.get("multi_select"):
+                tags = [t.get("name", "") for t in tags_prop["multi_select"]]
+                description = ", ".join(tags)
             
             events.append({
                 "id": page["id"],
@@ -240,9 +244,9 @@ async def add_event(title: str, date: str = "", time: str = "", description: str
             else:
                 notion_date = parsed_date
             
-            # Create page properties
+            # Create page properties (using Korean property names)
             properties = {
-                "Name": {
+                "이름": {  # Korean: Name
                     "title": [
                         {
                             "text": {
@@ -251,22 +255,18 @@ async def add_event(title: str, date: str = "", time: str = "", description: str
                         }
                     ]
                 },
-                "Date": {
+                "날짜": {  # Korean: Date
                     "date": {
                         "start": notion_date
                     }
                 }
             }
             
-            # Add description if provided
+            # Add tags if description provided (using 태그 property)
             if description:
-                properties["Description"] = {
-                    "rich_text": [
-                        {
-                            "text": {
-                                "content": description
-                            }
-                        }
+                properties["태그"] = {  # Korean: Tags
+                    "multi_select": [
+                        {"name": description[:100]}  # Limit length
                     ]
                 }
             
