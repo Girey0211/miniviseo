@@ -19,7 +19,7 @@ uv sync
 
 ### 3. 환경 변수 설정
 
-`.env` 파일에 유효한 OpenAI API 키를 설정하세요:
+`.env` 파일에 유효한 OpenAI API 키를 설정:
 
 `.env` 파일 예시:
 ```

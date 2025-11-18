@@ -1,7 +1,13 @@
 import pytest
+import sys
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
-from src.parser.request_parser import RequestParser, parse_request
-from src.parser.schemas import ParsedRequest
+
+# Add src to path
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+from parser.request_parser import RequestParser, parse_request
+from parser.schemas import ParsedRequest
 
 
 @pytest.fixture
