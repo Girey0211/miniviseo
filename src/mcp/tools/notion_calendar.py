@@ -2,6 +2,7 @@
 Notion Calendar MCP Tool - Calendar integration with Notion
 """
 import os
+import asyncio
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 import sys
@@ -10,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 try:
-    from notion_client import AsyncClient
+    from notion_client import Client
     NOTION_AVAILABLE = True
 except ImportError:
     NOTION_AVAILABLE = False
@@ -67,47 +68,52 @@ async def list_events(range_start: Optional[str] = None, range_end: Optional[str
         }
     
     try:
-        notion = AsyncClient(auth=NOTION_API_KEY)
-        
-        # Build filter for date range
-        filter_conditions = []
-        
-        if range_start:
-            filter_conditions.append({
-                "property": "Date",
-                "date": {
-                    "on_or_after": range_start
-                }
-            })
-        
-        if range_end:
-            filter_conditions.append({
-                "property": "Date",
-                "date": {
-                    "on_or_before": range_end
-                }
-            })
-        
-        # Query database
-        query_params = {
-            "database_id": NOTION_DATABASE_ID,
-            "sorts": [
-                {
+        def _query_notion():
+            notion = Client(auth=NOTION_API_KEY)
+            
+            # Build filter for date range
+            filter_conditions = []
+            
+            if range_start:
+                filter_conditions.append({
                     "property": "Date",
-                    "direction": "ascending"
-                }
-            ]
-        }
+                    "date": {
+                        "on_or_after": range_start
+                    }
+                })
+            
+            if range_end:
+                filter_conditions.append({
+                    "property": "Date",
+                    "date": {
+                        "on_or_before": range_end
+                    }
+                })
+            
+            # Query database
+            query_params = {
+                "sorts": [
+                    {
+                        "property": "Date",
+                        "direction": "ascending"
+                    }
+                ]
+            }
+            
+            if filter_conditions:
+                if len(filter_conditions) == 1:
+                    query_params["filter"] = filter_conditions[0]
+                else:
+                    query_params["filter"] = {
+                        "and": filter_conditions
+                    }
+            
+            return notion.databases.query(
+                database_id=NOTION_DATABASE_ID,
+                **query_params
+            )
         
-        if filter_conditions:
-            if len(filter_conditions) == 1:
-                query_params["filter"] = filter_conditions[0]
-            else:
-                query_params["filter"] = {
-                    "and": filter_conditions
-                }
-        
-        response = await notion.databases.query(**query_params)
+        response = await asyncio.to_thread(_query_notion)
         
         # Parse results
         events = []
@@ -189,52 +195,55 @@ async def add_event(title: str, date: str = "", time: str = "", description: str
         }
     
     try:
-        notion = AsyncClient(auth=NOTION_API_KEY)
-        
-        # Parse date
-        parsed_date = _parse_relative_date(date)
-        
-        # Combine date and time for Notion
-        if time:
-            notion_date = f"{parsed_date}T{time}:00"
-        else:
-            notion_date = parsed_date
-        
-        # Create page properties
-        properties = {
-            "Name": {
-                "title": [
-                    {
-                        "text": {
-                            "content": title
+        def _create_notion_page():
+            notion = Client(auth=NOTION_API_KEY)
+            
+            # Parse date
+            parsed_date = _parse_relative_date(date)
+            
+            # Combine date and time for Notion
+            if time:
+                notion_date = f"{parsed_date}T{time}:00"
+            else:
+                notion_date = parsed_date
+            
+            # Create page properties
+            properties = {
+                "Name": {
+                    "title": [
+                        {
+                            "text": {
+                                "content": title
+                            }
                         }
+                    ]
+                },
+                "Date": {
+                    "date": {
+                        "start": notion_date
                     }
-                ]
-            },
-            "Date": {
-                "date": {
-                    "start": notion_date
                 }
             }
-        }
-        
-        # Add description if provided
-        if description:
-            properties["Description"] = {
-                "rich_text": [
-                    {
-                        "text": {
-                            "content": description
+            
+            # Add description if provided
+            if description:
+                properties["Description"] = {
+                    "rich_text": [
+                        {
+                            "text": {
+                                "content": description
+                            }
                         }
-                    }
-                ]
-            }
+                    ]
+                }
+            
+            # Create page in database
+            return notion.pages.create(
+                parent={"database_id": NOTION_DATABASE_ID},
+                properties=properties
+            )
         
-        # Create page in database
-        response = await notion.pages.create(
-            parent={"database_id": NOTION_DATABASE_ID},
-            properties=properties
-        )
+        response = await asyncio.to_thread(_create_notion_page)
         
         event = {
             "id": response["id"],
