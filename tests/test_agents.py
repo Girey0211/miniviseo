@@ -11,8 +11,8 @@ from agents.note_agent import NoteAgent
 
 
 # Concrete implementation for testing
-class TestAgent(AgentBase):
-    """Test agent implementation"""
+class ConcreteTestAgent(AgentBase):
+    """Concrete test agent implementation"""
     
     async def handle(self, params):
         """Test implementation of handle"""
@@ -27,7 +27,7 @@ class TestAgentBase:
     
     def test_agent_initialization(self):
         """Test agent can be initialized"""
-        agent = TestAgent()
+        agent = ConcreteTestAgent()
         assert agent.mcp is None
         assert agent.llm is None
     
@@ -36,7 +36,7 @@ class TestAgentBase:
         mock_mcp = "mock_mcp_client"
         mock_llm = "mock_llm_client"
         
-        agent = TestAgent(mcp_client=mock_mcp, llm_client=mock_llm)
+        agent = ConcreteTestAgent(mcp_client=mock_mcp, llm_client=mock_llm)
         assert agent.mcp == mock_mcp
         assert agent.llm == mock_llm
     
@@ -53,7 +53,7 @@ class TestAgentBase:
     @pytest.mark.asyncio
     async def test_handle_returns_dict(self):
         """Test that handle returns a dictionary"""
-        agent = TestAgent()
+        agent = ConcreteTestAgent()
         result = await agent.handle({})
         
         assert isinstance(result, dict)
@@ -62,7 +62,7 @@ class TestAgentBase:
     
     def test_create_success_response(self):
         """Test creating success response"""
-        agent = TestAgent()
+        agent = ConcreteTestAgent()
         response = agent._create_success_response(
             result={"data": "test"},
             message="Success"
@@ -74,7 +74,7 @@ class TestAgentBase:
     
     def test_create_success_response_without_message(self):
         """Test creating success response without message"""
-        agent = TestAgent()
+        agent = ConcreteTestAgent()
         response = agent._create_success_response(result="test_data")
         
         assert response["status"] == "ok"
@@ -83,7 +83,7 @@ class TestAgentBase:
     
     def test_create_error_response(self):
         """Test creating error response"""
-        agent = TestAgent()
+        agent = ConcreteTestAgent()
         response = agent._create_error_response(message="Test error")
         
         assert response["status"] == "error"
@@ -92,7 +92,7 @@ class TestAgentBase:
     
     def test_create_error_response_with_exception(self):
         """Test creating error response with exception"""
-        agent = TestAgent()
+        agent = ConcreteTestAgent()
         test_error = ValueError("Test exception")
         response = agent._create_error_response(
             message="Error occurred",
@@ -106,13 +106,13 @@ class TestAgentBase:
     
     def test_get_agent_name(self):
         """Test getting agent name"""
-        agent = TestAgent()
-        assert agent.get_agent_name() == "TestAgent"
+        agent = ConcreteTestAgent()
+        assert agent.get_agent_name() == "ConcreteTestAgent"
     
     @pytest.mark.asyncio
     async def test_respond_via_llm_without_client(self):
         """Test respond_via_llm without LLM client"""
-        agent = TestAgent()
+        agent = ConcreteTestAgent()
         response = await agent.respond_via_llm("test prompt")
         
         assert response == "LLM client not available"
@@ -120,7 +120,7 @@ class TestAgentBase:
     @pytest.mark.asyncio
     async def test_respond_via_llm_with_client(self):
         """Test respond_via_llm with LLM client"""
-        agent = TestAgent(llm_client="mock_llm")
+        agent = ConcreteTestAgent(llm_client="mock_llm")
         response = await agent.respond_via_llm("test prompt")
         
         # Should return placeholder for now
@@ -129,7 +129,7 @@ class TestAgentBase:
     @pytest.mark.asyncio
     async def test_respond_via_llm_with_context(self):
         """Test respond_via_llm with context"""
-        agent = TestAgent(llm_client="mock_llm")
+        agent = ConcreteTestAgent(llm_client="mock_llm")
         context = {"key": "value"}
         response = await agent.respond_via_llm("test prompt", context=context)
         
