@@ -23,7 +23,7 @@ except ImportError:
 
 # Notion configuration
 NOTION_API_KEY = os.getenv("NOTION_API_KEY")
-NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID")
+NOTION_CALENDAR_DATABASE_ID = os.getenv("NOTION_CALENDAR_DATABASE_ID")
 
 
 def _format_database_id(db_id: str) -> str:
@@ -76,11 +76,11 @@ async def list_events(range_start: Optional[str] = None, range_end: Optional[str
             "message": "Notion client not available. Install with: uv add notion-client"
         }
     
-    if not NOTION_API_KEY or not NOTION_DATABASE_ID:
+    if not NOTION_API_KEY or not NOTION_CALENDAR_DATABASE_ID:
         return {
             "status": "error",
             "result": None,
-            "message": "Notion API key or database ID not configured. Set NOTION_API_KEY and NOTION_DATABASE_ID in .env"
+            "message": "Notion API key or calendar database ID not configured. Set NOTION_API_KEY and NOTION_CALENDAR_DATABASE_ID in .env"
         }
     
     try:
@@ -134,7 +134,7 @@ async def list_events(range_start: Optional[str] = None, range_end: Optional[str
                 "Content-Type": "application/json"
             }
             
-            formatted_db_id = _format_database_id(NOTION_DATABASE_ID)
+            formatted_db_id = _format_database_id(NOTION_CALENDAR_DATABASE_ID)
             url = f"https://api.notion.com/v1/databases/{formatted_db_id}/query"
             
             with httpx.Client() as client:
@@ -224,11 +224,11 @@ async def add_event(title: str, date: str = "", time: str = "", description: str
             "message": "Notion client not available. Install with: uv add notion-client"
         }
     
-    if not NOTION_API_KEY or not NOTION_DATABASE_ID:
+    if not NOTION_API_KEY or not NOTION_CALENDAR_DATABASE_ID:
         return {
             "status": "error",
             "result": None,
-            "message": "Notion API key or database ID not configured. Set NOTION_API_KEY and NOTION_DATABASE_ID in .env"
+            "message": "Notion API key or calendar database ID not configured. Set NOTION_API_KEY and NOTION_CALENDAR_DATABASE_ID in .env"
         }
     
     try:
@@ -277,7 +277,7 @@ async def add_event(title: str, date: str = "", time: str = "", description: str
                 "Content-Type": "application/json"
             }
             
-            formatted_db_id = _format_database_id(NOTION_DATABASE_ID)
+            formatted_db_id = _format_database_id(NOTION_CALENDAR_DATABASE_ID)
             body = {
                 "parent": {"database_id": formatted_db_id},
                 "properties": properties

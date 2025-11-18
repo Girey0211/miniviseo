@@ -1,12 +1,12 @@
 # MCP Tools Package
-from . import file_manager
 from . import notes
 from . import http_fetcher
 from . import notion_calendar
+from . import notion_notes
 
 __all__ = [
-    "file_manager",
     "notes", 
     "http_fetcher",
-    "notion_calendar"
+    "notion_calendar",
+    "notion_notes"
 ]

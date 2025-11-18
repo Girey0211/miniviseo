@@ -2,6 +2,22 @@
 
 LLM 기반 개인 비서 토이 프로젝트
 
+## 빠른 시작
+
+```bash
+# 1. 프로젝트 클론 및 이동
+cd ai-assistant
+
+# 2. 의존성 설치
+uv sync
+
+# 3. .env 파일에 OpenAI API 키 설정
+# OPENAI_API_KEY=sk-proj-your-key-here
+
+# 4. 실행
+uv run aia
+```
+
 ## 설치 방법
 
 ### 1. mac 환경 uv 설치 (Python 패키지 매니저)
@@ -11,12 +27,14 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 source $HOME/.local/bin/env
 ```
 
-### 2. 프로젝트 의존성 설치
+### 2. 프로젝트 의존성 설치 및 명령어 등록
 
 ```bash
 cd ai-assistant
 uv sync
 ```
+
+이 명령어는 의존성을 설치하고 `aia`, `assistant`, `ai-assistant` 명령어를 등록합니다.
 
 ### 3. 환경 변수 설정
 
@@ -33,24 +51,26 @@ uv sync
 OPENAI_API_KEY=sk-proj-your-actual-api-key-here
 OPENAI_MODEL=gpt-4o-mini
 
-# Notion Integration (Optional - for calendar features)
-# NOTION_API_KEY=secret_...
-# NOTION_DATABASE_ID=...
+# Notion Integration (Required for notes and calendar features)
+NOTION_API_KEY=secret_your_integration_token
+NOTION_DATABASE_ID=your_calendar_database_id
+NOTION_NOTES_DATABASE_ID=your_notes_database_id
 ```
 
 ## 실행 방법
 
 ### 대화형 모드 (CLI)
 
+실행 방법들:
+
 ```bash
-cd ai-assistant
+# 전체 명령어
+uv run ai-assistant
+
+# Python 모듈로 실행
 uv run python src/app.py
-```
 
-또는:
-
-```bash
-cd ai-assistant
+# 또는
 python -m src.app
 ```
 
@@ -82,35 +102,73 @@ python src/app.py
 
 ## 지원하는 기능
 
-- **파일 관리**: 파일 목록 조회, 파일 읽기
-- **메모**: 메모 작성, 메모 목록 조회
-- **일정**: 일정 조회, 일정 추가 (Notion 또는 mock)
+- **메모**: 메모 작성, 메모 목록 조회 (Notion 통합)
+- **일정**: 일정 조회, 일정 추가 (Notion 통합)
 - **웹 검색**: HTTP 요청 및 검색
 
-## Notion 통합 (필수 - 일정 기능)
+## Notion 통합 (필수)
 
-일정 관리 기능은 Notion API를 사용합니다:
+메모 및 일정 관리 기능은 Notion API를 사용합니다.
 
-1. Notion Integration 생성: https://www.notion.so/my-integrations
-2. Database 생성 및 Integration 연결
-3. Database에 다음 속성 추가:
-   - `Title` (제목) - Title 타입
-   - `Date` (날짜) - Date 타입
-   - `Description` (설명) - Text 타입
-4. `.env` 파일에 설정 추가:
-   ```
-   NOTION_API_KEY=secret_your_integration_token
-   NOTION_DATABASE_ID=your_database_id
-   ```
+### 1. Notion Integration 생성
 
-Notion이 설정되지 않은 경우 일정 기능 사용 시 에러 메시지가 표시됩니다.
+1. https://www.notion.so/my-integrations 에서 새 Integration 생성
+2. Integration 이름 설정 (예: "AI Assistant")
+3. Integration Token 복사 (secret_로 시작)
+
+### 2. Notion 데이터베이스 생성
+
+#### 일정 데이터베이스
+
+1. Notion에서 새 Database 생성
+2. 다음 속성 추가:
+   - **제목** (Title) - Title 타입
+   - **날짜** (Date) - Date 타입
+   - **설명** (Description) - Text 타입
+3. Database를 Integration과 연결 (Share → Integration 선택)
+4. Database ID 복사 (URL에서 확인 가능)
+
+#### 메모 데이터베이스
+
+1. Notion에서 새 Database 생성
+2. 다음 속성 추가:
+   - **제목** (Title) - Title 타입
+   - **내용** (Rich Text) - Rich Text 타입
+   - **생성일** (Created) - Created time 타입
+3. Database를 Integration과 연결 (Share → Integration 선택)
+4. Database ID 복사 (URL에서 확인 가능)
+
+### 3. 환경 변수 설정
+
+`.env` 파일에 Notion 설정 추가:
+
+```
+OPENAI_API_KEY=sk-proj-your-actual-api-key-here
+OPENAI_MODEL=gpt-4o-mini
+
+# Notion Integration
+NOTION_API_KEY=secret_your_integration_token
+NOTION_DATABASE_ID=your_calendar_database_id
+NOTION_NOTES_DATABASE_ID=your_notes_database_id
+```
+
+**주의**: Notion이 설정되지 않은 경우 메모 및 일정 기능 사용 시 에러 메시지가 표시됩니다.
 
 ## 예시 명령어
 
-- "downloads 폴더 파일 보여줘"
+### 메모 관리
 - "오늘 한 일 메모해줘: 프로젝트 설정 완료"
+- "회의록 작성해줘: 제목은 팀 미팅, 내용은 Q1 목표 논의"
+- "내 메모 목록 보여줘"
+
+### 일정 관리
 - "오늘 오전 9시에 회의 추가해줘"
+- "내일 오후 2시에 치과 예약 추가"
+- "이번 주 일정 보여줘"
+
+### 웹 검색
 - "파이썬 최신 뉴스 검색해줘"
+- "OpenAI API 문서 찾아줘"
 
 ## 프로젝트 구조
 
@@ -127,20 +185,17 @@ ai-assistant/
 │  │  └─ agent_router.py        # Intent → Agent 매핑
 │  ├─ agents/                   # 각종 Agent 구현
 │  │  ├─ base.py                # AgentBase 추상 클래스
-│  │  ├─ file_agent.py          # 파일 작업
-│  │  ├─ note_agent.py          # 메모 관리
-│  │  ├─ calendar_agent.py      # 일정 관리
+│  │  ├─ note_agent.py          # 메모 관리 (Notion 통합)
+│  │  ├─ calendar_agent.py      # 일정 관리 (Notion 통합)
 │  │  ├─ web_agent.py           # 웹 요청
 │  │  └─ fallback_agent.py      # 알 수 없는 요청 처리
 │  ├─ mcp/                      # MCP 레이어
 │  │  ├─ client.py              # MCP 클라이언트
 │  │  └─ tools/                 # MCP 툴 구현
-│  │     ├─ file_manager.py     # 파일 시스템
-│  │     ├─ notes.py            # 메모 저장
-│  │     ├─ notion_calendar.py  # Notion 일정
+│  │     ├─ notion_notes.py     # Notion 메모 관리
+│  │     ├─ notion_calendar.py  # Notion 일정 관리
 │  │     └─ http_fetcher.py     # HTTP 요청
-│  ├─ data/                     # 데이터 저장소
-│  │  └─ notes.json             # 메모 데이터
+│  ├─ data/                     # 데이터 저장소 (deprecated)
 │  └─ utils/                    # 유틸리티
 │     └─ logger.py              # 로깅 설정
 ├─ tests/                       # 테스트 코드
@@ -152,7 +207,7 @@ ai-assistant/
 
 - ✅ Phase 1: Request Parser (자연어 → 구조화된 요청)
 - ✅ Phase 1.5: Agent Router (Intent → Agent 매핑)
-- ✅ Phase 2: Agents 구현 (File, Note, Calendar, Web, Fallback)
+- ✅ Phase 2: Agents 구현 (Note, Calendar, Web, Fallback)
 - ✅ Phase 2.5: MCP Layer (Tools 구현 + Notion 통합)
 - ✅ Phase 3: E2E Integration (완전한 파이프라인)
 - ✅ Phase 3.5: CLI (대화형 인터페이스)

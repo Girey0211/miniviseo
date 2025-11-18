@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, MagicMock
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from agents.base import AgentBase
-from agents.file_agent import FileAgent
 from agents.note_agent import NoteAgent
 
 
@@ -169,70 +168,6 @@ class TestAgentBaseAbstract:
 
 
 
-class TestFileAgent:
-    """Test cases for FileAgent"""
-    
-    @pytest.fixture
-    def mock_mcp(self):
-        """Create mock MCP client"""
-        mock = MagicMock()
-        mock.call = AsyncMock()
-        return mock
-    
-    @pytest.mark.asyncio
-    async def test_file_agent_list_files(self, mock_mcp):
-        """Test FileAgent listing files"""
-        mock_mcp.call.return_value = {
-            "status": "ok",
-            "result": [{"name": "test.txt", "type": "file"}],
-            "message": "Found 1 items"
-        }
-        
-        agent = FileAgent(mcp_client=mock_mcp)
-        result = await agent.handle({"path": ".", "action": "list_files"})
-        
-        assert result["status"] == "ok"
-        assert len(result["result"]) == 1
-        mock_mcp.call.assert_called_once_with("file_manager", "list_files", {"path": "."})
-    
-    @pytest.mark.asyncio
-    async def test_file_agent_read_file(self, mock_mcp):
-        """Test FileAgent reading a file"""
-        mock_mcp.call.return_value = {
-            "status": "ok",
-            "result": {"content": "file content"},
-            "message": "File read"
-        }
-        
-        agent = FileAgent(mcp_client=mock_mcp)
-        result = await agent.handle({"path": "test.txt", "action": "read_file"})
-        
-        assert result["status"] == "ok"
-        mock_mcp.call.assert_called_once_with("file_manager", "read_file", {"path": "test.txt"})
-    
-    @pytest.mark.asyncio
-    async def test_file_agent_without_mcp(self):
-        """Test FileAgent without MCP client"""
-        agent = FileAgent()
-        result = await agent.handle({"path": "."})
-        
-        assert result["status"] == "error"
-        assert "MCP client not available" in result["message"]
-    
-    @pytest.mark.asyncio
-    async def test_file_agent_default_path(self, mock_mcp):
-        """Test FileAgent with default path"""
-        mock_mcp.call.return_value = {"status": "ok", "result": [], "message": ""}
-        
-        agent = FileAgent(mcp_client=mock_mcp)
-        result = await agent.handle({})
-        
-        # Should use default path "."
-        mock_mcp.call.assert_called_once()
-        call_args = mock_mcp.call.call_args
-        assert call_args[0][2]["path"] == "."
-
-
 class TestNoteAgent:
     """Test cases for NoteAgent"""
     
@@ -245,18 +180,25 @@ class TestNoteAgent:
     
     @pytest.mark.asyncio
     async def test_note_agent_write_note(self, mock_mcp):
-        """Test NoteAgent writing a note"""
+        """Test NoteAgent writing a note to Notion"""
         mock_mcp.call.return_value = {
             "status": "ok",
-            "result": {"id": 1, "text": "Test note"},
-            "message": "Note saved"
+            "result": {
+                "id": "page-123",
+                "title": "Test",
+                "content": "Test note",
+                "created_at": "2024-01-15T10:30:00.000Z",
+                "url": "https://notion.so/page-123"
+            },
+            "message": "Note created in Notion"
         }
         
         agent = NoteAgent(mcp_client=mock_mcp)
         result = await agent.handle({"text": "Test note", "title": "Test"})
         
         assert result["status"] == "ok"
-        mock_mcp.call.assert_called_once_with("notes", "write", {
+        assert result["result"]["id"] == "page-123"
+        mock_mcp.call.assert_called_once_with("notion_notes", "write", {
             "text": "Test note",
             "title": "Test"
         })
@@ -264,21 +206,40 @@ class TestNoteAgent:
     @pytest.mark.asyncio
     async def test_note_agent_write_with_content_param(self, mock_mcp):
         """Test NoteAgent with 'content' parameter"""
-        mock_mcp.call.return_value = {"status": "ok", "result": {}, "message": ""}
+        mock_mcp.call.return_value = {
+            "status": "ok",
+            "result": {
+                "id": "page-456",
+                "title": "",
+                "content": "Note content",
+                "created_at": "2024-01-15T10:30:00.000Z",
+                "url": "https://notion.so/page-456"
+            },
+            "message": "Note created"
+        }
         
         agent = NoteAgent(mcp_client=mock_mcp)
         result = await agent.handle({"content": "Note content"})
         
         assert result["status"] == "ok"
         call_args = mock_mcp.call.call_args
+        assert call_args[0][0] == "notion_notes"
         assert call_args[0][2]["text"] == "Note content"
     
     @pytest.mark.asyncio
     async def test_note_agent_list_notes(self, mock_mcp):
-        """Test NoteAgent listing notes"""
+        """Test NoteAgent listing notes from Notion"""
         mock_mcp.call.return_value = {
             "status": "ok",
-            "result": [{"id": 1, "text": "Note 1"}],
+            "result": [
+                {
+                    "id": "page-1",
+                    "title": "Note 1",
+                    "content": "Content 1",
+                    "created_at": "2024-01-15T10:30:00.000Z",
+                    "url": "https://notion.so/page-1"
+                }
+            ],
             "message": "Found 1 notes"
         }
         
@@ -286,7 +247,9 @@ class TestNoteAgent:
         result = await agent.handle({"action": "list_notes"})
         
         assert result["status"] == "ok"
-        mock_mcp.call.assert_called_once_with("notes", "list", {})
+        assert len(result["result"]) == 1
+        assert result["result"][0]["id"] == "page-1"
+        mock_mcp.call.assert_called_once_with("notion_notes", "list", {})
     
     @pytest.mark.asyncio
     async def test_note_agent_without_text(self, mock_mcp):
@@ -305,6 +268,36 @@ class TestNoteAgent:
         
         assert result["status"] == "error"
         assert "MCP client not available" in result["message"]
+    
+    @pytest.mark.asyncio
+    async def test_note_agent_notion_api_error(self, mock_mcp):
+        """Test NoteAgent handling Notion API errors"""
+        mock_mcp.call.return_value = {
+            "status": "error",
+            "result": None,
+            "message": "Notion API key not configured"
+        }
+        
+        agent = NoteAgent(mcp_client=mock_mcp)
+        result = await agent.handle({"text": "Test note", "title": "Test"})
+        
+        assert result["status"] == "error"
+        assert "Notion API" in result["message"]
+    
+    @pytest.mark.asyncio
+    async def test_note_agent_list_with_action_list(self, mock_mcp):
+        """Test NoteAgent listing with 'list' action"""
+        mock_mcp.call.return_value = {
+            "status": "ok",
+            "result": [],
+            "message": "No notes found"
+        }
+        
+        agent = NoteAgent(mcp_client=mock_mcp)
+        result = await agent.handle({"action": "list"})
+        
+        assert result["status"] == "ok"
+        mock_mcp.call.assert_called_once_with("notion_notes", "list", {})
 
 
 

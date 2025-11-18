@@ -22,14 +22,13 @@ from utils.logger import get_logger
 logger = get_logger()
 
 # Import agents
-from agents.file_agent import FileAgent
 from agents.note_agent import NoteAgent
 from agents.calendar_agent import CalendarAgent
 from agents.web_agent import WebAgent
 from agents.fallback_agent import FallbackAgent
 
 # Import MCP tools
-from mcp.tools import file_manager, notes, http_fetcher, notion_calendar
+from mcp.tools import notes, http_fetcher, notion_calendar, notion_notes
 
 console = Console()
 
@@ -50,11 +49,11 @@ def initialize_app():
     logger.debug("MCP client initialized")
     
     # Register MCP tools
-    register_tool("file_manager", file_manager)
     register_tool("notes", notes)
     register_tool("http_fetcher", http_fetcher)
     register_tool("notion_calendar", notion_calendar)
-    logger.info("MCP tools registered: file_manager, notes, http_fetcher, notion_calendar")
+    register_tool("notion_notes", notion_notes)
+    logger.info("MCP tools registered: notes, http_fetcher, notion_calendar, notion_notes")
     
     # Initialize LLM client
     _llm_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
@@ -62,7 +61,6 @@ def initialize_app():
     
     # Create agent instances with MCP and LLM clients
     _agent_instances = {
-        "FileAgent": FileAgent(mcp_client=_mcp_client, llm_client=_llm_client),
         "NoteAgent": NoteAgent(mcp_client=_mcp_client, llm_client=_llm_client),
         "CalendarAgent": CalendarAgent(mcp_client=_mcp_client, llm_client=_llm_client),
         "WebAgent": WebAgent(mcp_client=_mcp_client, llm_client=_llm_client),
@@ -154,7 +152,9 @@ async def run_once(text: str) -> str:
         logger.info(f"Routing to agent: {agent.get_agent_name()}")
         
         # Step 3: Execute agent
-        result = await agent.handle(parsed.params)
+        # Add intent to params for agent to use
+        params_with_intent = {**parsed.params, "intent": parsed.intent}
+        result = await agent.handle(params_with_intent)
         logger.debug(f"Agent result: {result.get('status')} - {result.get('message', '')}")
         
         # Step 4: Generate natural language response

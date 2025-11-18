@@ -12,8 +12,6 @@ from parser.schemas import ParsedRequest
 
 # Intent to Agent mapping
 INTENT_MAP = {
-    "list_files": "FileAgent",
-    "read_file": "FileAgent",
     "write_note": "NoteAgent",
     "list_notes": "NoteAgent",
     "calendar_list": "CalendarAgent",

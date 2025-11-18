@@ -6,80 +6,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from mcp.tools import file_manager, notes
+from mcp.tools import notes
 from mcp.client import MCPClient, get_mcp_client, register_tool
-
-
-class TestFileManager:
-    """Test cases for file_manager tool"""
-    
-    @pytest.mark.asyncio
-    async def test_list_files_current_directory(self):
-        """Test listing files in current directory"""
-        result = await file_manager.list_files(".")
-        
-        assert result["status"] == "ok"
-        assert isinstance(result["result"], list)
-        assert len(result["result"]) > 0
-    
-    @pytest.mark.asyncio
-    async def test_list_files_nonexistent_path(self):
-        """Test listing files in nonexistent directory"""
-        result = await file_manager.list_files("/nonexistent/path/xyz")
-        
-        assert result["status"] == "error"
-        assert "does not exist" in result["message"]
-    
-    @pytest.mark.asyncio
-    async def test_list_files_returns_metadata(self):
-        """Test that list_files returns file metadata"""
-        result = await file_manager.list_files(".")
-        
-        assert result["status"] == "ok"
-        files = result["result"]
-        
-        if len(files) > 0:
-            file_item = files[0]
-            assert "name" in file_item
-            assert "type" in file_item
-            assert "size" in file_item
-            assert "path" in file_item
-    
-    @pytest.mark.asyncio
-    async def test_read_file_success(self, tmp_path):
-        """Test reading a file successfully"""
-        # Create a temporary file
-        test_file = tmp_path / "test.txt"
-        test_content = "Hello, World!"
-        test_file.write_text(test_content)
-        
-        result = await file_manager.read_file(str(test_file))
-        
-        assert result["status"] == "ok"
-        assert result["result"]["content"] == test_content
-        assert result["result"]["truncated"] is False
-    
-    @pytest.mark.asyncio
-    async def test_read_file_nonexistent(self):
-        """Test reading nonexistent file"""
-        result = await file_manager.read_file("/nonexistent/file.txt")
-        
-        assert result["status"] == "error"
-        assert "does not exist" in result["message"]
-    
-    @pytest.mark.asyncio
-    async def test_read_file_truncation(self, tmp_path):
-        """Test file content truncation for large files"""
-        # Create a large file
-        test_file = tmp_path / "large.txt"
-        large_content = "x" * 20000  # 20KB
-        test_file.write_text(large_content)
-        
-        result = await file_manager.read_file(str(test_file), max_bytes=5000)
-        
-        assert result["status"] == "ok"
-        assert result["result"]["truncated"] is True
-        assert len(result["result"]["content"]) == 5000
 
 
 class TestNotes:
@@ -185,17 +113,24 @@ class TestMCPClient:
     @pytest.mark.asyncio
     async def test_call_nonexistent_action(self, mcp_client):
         """Test calling an action that doesn't exist"""
-        mcp_client.register_tool("test_tool", file_manager)
+        mcp_client.register_tool("test_tool", notes)
         result = await mcp_client.call("test_tool", "nonexistent_action", {})
         
         assert result["status"] == "error"
         assert "not found" in result["message"]
     
     @pytest.mark.asyncio
-    async def test_call_successful(self, mcp_client):
+    async def test_call_successful(self, mcp_client, tmp_path, monkeypatch):
         """Test successful tool call"""
-        mcp_client.register_tool("file_manager", file_manager)
-        result = await mcp_client.call("file_manager", "list_files", {"path": "."})
+        # Setup temp notes file
+        notes_file = tmp_path / "test_notes.json"
+        import config
+        monkeypatch.setattr(config, "NOTES_FILE", notes_file)
+        import mcp.tools.notes as notes_module
+        monkeypatch.setattr(notes_module, "NOTES_FILE", notes_file)
+        
+        mcp_client.register_tool("notes", notes)
+        result = await mcp_client.call("notes", "list", {})
         
         assert result["status"] == "ok"
         assert isinstance(result["result"], list)
@@ -207,7 +142,7 @@ class TestMCPClient:
     
     def test_register_tool_convenience(self):
         """Test convenience function for registering tool"""
-        register_tool("test_tool", file_manager)
+        register_tool("test_tool", notes)
         client = get_mcp_client()
         assert "test_tool" in client.tools
 

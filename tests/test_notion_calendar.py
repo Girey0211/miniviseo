@@ -16,7 +16,7 @@ class TestNotionCalendar:
         
         # Patch the environment variables at module level
         monkeypatch.setattr(notion_calendar, "NOTION_API_KEY", None)
-        monkeypatch.setattr(notion_calendar, "NOTION_DATABASE_ID", None)
+        monkeypatch.setattr(notion_calendar, "NOTION_CALENDAR_DATABASE_ID", None)
         
         result = await notion_calendar.list_events()
         
@@ -30,7 +30,7 @@ class TestNotionCalendar:
         
         # Patch the environment variables at module level
         monkeypatch.setattr(notion_calendar, "NOTION_API_KEY", None)
-        monkeypatch.setattr(notion_calendar, "NOTION_DATABASE_ID", None)
+        monkeypatch.setattr(notion_calendar, "NOTION_CALENDAR_DATABASE_ID", None)
         
         result = await notion_calendar.add_event(title="Test Event")
         
@@ -44,7 +44,7 @@ class TestNotionCalendar:
         from mcp.tools import notion_calendar
         
         # Only run if Notion is configured
-        if not (os.getenv("NOTION_API_KEY") and os.getenv("NOTION_DATABASE_ID")):
+        if not (os.getenv("NOTION_API_KEY") and os.getenv("NOTION_CALENDAR_DATABASE_ID")):
             pytest.skip("Notion not configured - skipping real API test")
         
         # This test validates that the function works with real config
@@ -92,7 +92,7 @@ class TestNotionCalendar:
         
         # Patch environment variables and httpx
         monkeypatch.setattr(notion_calendar, "NOTION_API_KEY", "test_key")
-        monkeypatch.setattr(notion_calendar, "NOTION_DATABASE_ID", "test_db_id")
+        monkeypatch.setattr(notion_calendar, "NOTION_CALENDAR_DATABASE_ID", "test_db_id")
         
         with patch('httpx.Client', return_value=mock_client):
             result = await notion_calendar.list_events()
