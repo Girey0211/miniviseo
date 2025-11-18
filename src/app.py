@@ -16,7 +16,10 @@ from openai import AsyncOpenAI
 from parser.request_parser import parse_request
 from router.agent_router import route_to_agent, register_agent
 from mcp.client import get_mcp_client, register_tool
-from config import OPENAI_API_KEY, OPENAI_MODEL
+from config import OPENAI_API_KEY, OPENAI_MODEL, LOG_FILE
+from utils.logger import get_logger
+
+logger = get_logger()
 
 # Import agents
 from agents.file_agent import FileAgent
@@ -40,17 +43,22 @@ def initialize_app():
     """Initialize MCP client, LLM client, and register agents/tools"""
     global _mcp_client, _llm_client, _agent_instances
     
+    logger.info("Initializing AI Personal Assistant...")
+    
     # Initialize MCP client
     _mcp_client = get_mcp_client()
+    logger.debug("MCP client initialized")
     
     # Register MCP tools
     register_tool("file_manager", file_manager)
     register_tool("notes", notes)
     register_tool("http_fetcher", http_fetcher)
     register_tool("notion_calendar", notion_calendar)
+    logger.info("MCP tools registered: file_manager, notes, http_fetcher, notion_calendar")
     
     # Initialize LLM client
     _llm_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+    logger.debug(f"LLM client initialized with model: {OPENAI_MODEL}")
     
     # Create agent instances with MCP and LLM clients
     _agent_instances = {
@@ -64,6 +72,9 @@ def initialize_app():
     # Register agents with router
     for agent_name, agent_instance in _agent_instances.items():
         register_agent(agent_name, agent_instance)
+    
+    logger.info(f"Agents registered: {', '.join(_agent_instances.keys())}")
+    logger.info("Initialization complete")
 
 
 async def summarize_result(result: dict, parsed_request) -> str:
@@ -119,13 +130,17 @@ async def run_once(text: str) -> str:
         Response string
     """
     try:
+        logger.info(f"Processing request: {text}")
+        
         # Step 1: Parse request
         parsed = await parse_request(text)
+        logger.debug(f"Parsed request - Intent: {parsed.intent}, Agent: {parsed.agent}, Params: {parsed.params}")
         
         # Step 2: Route to agent
         agent_class = route_to_agent(parsed)
         
         if agent_class is None:
+            logger.warning("No agent found for request")
             return "죄송합니다. 요청을 처리할 수 없습니다."
         
         # Get agent instance
@@ -133,17 +148,23 @@ async def run_once(text: str) -> str:
         
         if agent is None:
             # Fallback to FallbackAgent
+            logger.warning(f"Agent {parsed.agent} not found, using FallbackAgent")
             agent = _agent_instances.get("FallbackAgent")
+        
+        logger.info(f"Routing to agent: {agent.get_agent_name()}")
         
         # Step 3: Execute agent
         result = await agent.handle(parsed.params)
+        logger.debug(f"Agent result: {result.get('status')} - {result.get('message', '')}")
         
         # Step 4: Generate natural language response
         final_response = await summarize_result(result, parsed)
+        logger.info("Request processed successfully")
         
         return final_response
         
     except Exception as e:
+        logger.error(f"Error processing request: {str(e)}", exc_info=True)
         return f"오류가 발생했습니다: {str(e)}"
 
 
@@ -155,9 +176,11 @@ async def main_loop():
     console.print(Panel.fit(
         "[bold cyan]AI Personal Assistant[/bold cyan]\n"
         "자연어로 명령을 입력하세요.\n"
-        "종료: /exit, 도움말: /help",
+        "종료: /exit, 도움말: /help, 디버그: /debug",
         border_style="cyan"
     ))
+    
+    debug_mode = False
     
     while True:
         try:
@@ -169,6 +192,7 @@ async def main_loop():
             
             # Handle commands
             if user_input.strip() == "/exit":
+                logger.info("User requested exit")
                 console.print("[yellow]종료합니다.[/yellow]")
                 break
             elif user_input.strip() == "/help":
@@ -180,20 +204,33 @@ async def main_loop():
                     "• 웹 검색: '파이썬 최신 뉴스 검색해줘'\n\n"
                     "[bold]특수 명령:[/bold]\n"
                     "• /exit - 종료\n"
-                    "• /help - 도움말",
+                    "• /help - 도움말\n"
+                    "• /debug - 디버그 모드 토글",
                     title="도움말",
                     border_style="blue"
                 ))
+                continue
+            elif user_input.strip() == "/debug":
+                debug_mode = not debug_mode
+                status = "활성화" if debug_mode else "비활성화"
+                console.print(f"[yellow]디버그 모드 {status}[/yellow]")
+                logger.info(f"Debug mode toggled: {debug_mode}")
                 continue
             
             # Process request
             response = await run_once(user_input)
             console.print(f"[bold blue]Assistant[/bold blue]: {response}")
             
+            # Show debug info if enabled
+            if debug_mode:
+                console.print(f"[dim]로그 파일: {LOG_FILE}[/dim]")
+            
         except KeyboardInterrupt:
+            logger.info("User interrupted with Ctrl+C")
             console.print("\n[yellow]종료합니다.[/yellow]")
             break
         except Exception as e:
+            logger.error(f"Unexpected error in main loop: {str(e)}", exc_info=True)
             console.print(f"[red]Error: {str(e)}[/red]")
 
 
