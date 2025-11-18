@@ -137,41 +137,4 @@ class TestNotionCalendar:
 class TestCalendarAgentWithNotion:
     """Test CalendarAgent with Notion integration"""
     
-    @pytest.fixture
-    def mock_mcp(self):
-        """Create mock MCP client"""
-        mock = MagicMock()
-        mock.call = AsyncMock()
-        return mock
-    
-    @pytest.mark.asyncio
-    async def test_calendar_agent_fallback_to_mock(self, mock_mcp):
-        """Test CalendarAgent falls back to mock when Notion not configured"""
-        from agents.calendar_agent import CalendarAgent
-        
-        # First call returns Notion error
-        # Second call returns mock success
-        mock_mcp.call.side_effect = [
-            {
-                "status": "error",
-                "result": None,
-                "message": "Notion API key or database ID not configured"
-            },
-            {
-                "status": "ok",
-                "result": {"id": 1, "title": "Test Event"},
-                "message": "Event added"
-            }
-        ]
-        
-        agent = CalendarAgent(mcp_client=mock_mcp)
-        result = await agent.handle({
-            "action": "add",
-            "title": "Test Event",
-            "date": "2024-01-01"
-        })
-        
-        # Should succeed with mock fallback
-        assert result["status"] == "ok"
-        # Should have called twice (Notion then mock)
-        assert mock_mcp.call.call_count == 2
+

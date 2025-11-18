@@ -1,5 +1,5 @@
 """
-CalendarAgent - Handles calendar operations (mock)
+CalendarAgent - Handles calendar operations using Notion
 """
 import sys
 from pathlib import Path
@@ -11,7 +11,7 @@ from agents.base import AgentBase
 
 
 class CalendarAgent(AgentBase):
-    """Agent for calendar operations (mock implementation)"""
+    """Agent for calendar operations using Notion Calendar"""
     
     async def handle(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -34,10 +34,6 @@ class CalendarAgent(AgentBase):
         action = params.get("action", "list")
         
         try:
-            # Determine which calendar backend to use (Notion or mock)
-            # Try Notion first, fall back to mock if not configured
-            calendar_tool = "notion_calendar"  # Default to Notion
-            
             if action in ["calendar_add", "add"]:
                 # Add event
                 title = params.get("title", "")
@@ -48,37 +44,21 @@ class CalendarAgent(AgentBase):
                 if not title:
                     return self._create_error_response("Event title is required")
                 
-                result = await self.mcp.call(calendar_tool, "add_event", {
+                result = await self.mcp.call("notion_calendar", "add_event", {
                     "title": title,
                     "date": date,
                     "time": time,
                     "description": description
                 })
-                
-                # If Notion fails due to configuration, try mock
-                if result["status"] == "error" and "not configured" in result["message"]:
-                    result = await self.mcp.call("calendar_mock", "add_event", {
-                        "title": title,
-                        "date": date,
-                        "time": time,
-                        "description": description
-                    })
             else:
                 # List events (default)
                 range_start = params.get("range_start") or params.get("start_date")
                 range_end = params.get("range_end") or params.get("end_date")
                 
-                result = await self.mcp.call(calendar_tool, "list_events", {
+                result = await self.mcp.call("notion_calendar", "list_events", {
                     "range_start": range_start,
                     "range_end": range_end
                 })
-                
-                # If Notion fails due to configuration, try mock
-                if result["status"] == "error" and "not configured" in result["message"]:
-                    result = await self.mcp.call("calendar_mock", "list_events", {
-                        "range_start": range_start,
-                        "range_end": range_end
-                    })
             
             return result
             

@@ -17,7 +17,6 @@ LOGS_DIR = PROJECT_ROOT / "logs"
 
 # Data files
 NOTES_FILE = DATA_DIR / "notes.json"
-CALENDAR_FILE = DATA_DIR / "calendar.json"
 
 # Logging
 LOG_FILE = LOGS_DIR / "assistant.log"
