@@ -355,7 +355,8 @@ class TestCalendarAgent:
         result = await agent.handle({"action": "list"})
         
         assert result["status"] == "ok"
-        mock_mcp.call.assert_called_once_with("calendar_mock", "list_events", {
+        # Now calls notion_calendar first (with fallback to calendar_mock)
+        mock_mcp.call.assert_called_once_with("notion_calendar", "list_events", {
             "range_start": None,
             "range_end": None
         })

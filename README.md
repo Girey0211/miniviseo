@@ -14,17 +14,28 @@ source $HOME/.local/bin/env
 ### 2. 프로젝트 의존성 설치
 
 ```bash
+cd ai-assistant
 uv sync
 ```
 
 ### 3. 환경 변수 설정
 
-`.env` 파일에 유효한 OpenAI API 키를 설정:
+`.env` 파일에 유효한 OpenAI API 키를 설정하세요:
+
+```bash
+# .env 파일을 열어서 OPENAI_API_KEY를 실제 키로 변경
+# OpenAI API 키는 https://platform.openai.com/api-keys 에서 발급받을 수 있습니다
+# 주의: API 키에 충분한 크레딧이 있어야 합니다
+```
 
 `.env` 파일 예시:
 ```
 OPENAI_API_KEY=sk-proj-your-actual-api-key-here
 OPENAI_MODEL=gpt-4o-mini
+
+# Notion Integration (Optional - for calendar features)
+# NOTION_API_KEY=secret_...
+# NOTION_DATABASE_ID=...
 ```
 
 ## 실행 방법
@@ -65,8 +76,22 @@ python src/app.py
 
 - **파일 관리**: 파일 목록 조회, 파일 읽기
 - **메모**: 메모 작성, 메모 목록 조회
-- **일정**: 일정 조회, 일정 추가 (mock)
+- **일정**: 일정 조회, 일정 추가 (Notion 또는 mock)
 - **웹 검색**: HTTP 요청 및 검색
+
+## Notion 통합 (선택사항)
+
+일정 관리 기능을 Notion과 연동할 수 있습니다:
+
+1. Notion Integration 생성: https://www.notion.so/my-integrations
+2. Database 생성 및 Integration 연결
+3. `.env` 파일에 설정 추가:
+   ```
+   NOTION_API_KEY=secret_your_integration_token
+   NOTION_DATABASE_ID=your_database_id
+   ```
+
+Notion이 설정되지 않은 경우 자동으로 로컬 JSON 파일 기반 mock으로 동작합니다.
 
 ## 예시 명령어
 
@@ -83,11 +108,43 @@ ai-assistant/
 │  ├─ app.py                    # 메인 진입점
 │  ├─ config.py                 # 설정
 │  ├─ parser/                   # 자연어 파싱
+│  │  ├─ request_parser.py      # LLM 기반 파싱
+│  │  ├─ schemas.py             # Pydantic 모델
+│  │  └─ prompt.txt             # 파싱 프롬프트
 │  ├─ router/                   # Agent 라우팅
+│  │  └─ agent_router.py        # Intent → Agent 매핑
 │  ├─ agents/                   # 각종 Agent 구현
+│  │  ├─ base.py                # AgentBase 추상 클래스
+│  │  ├─ file_agent.py          # 파일 작업
+│  │  ├─ note_agent.py          # 메모 관리
+│  │  ├─ calendar_agent.py      # 일정 관리
+│  │  ├─ web_agent.py           # 웹 요청
+│  │  └─ fallback_agent.py      # 알 수 없는 요청 처리
 │  ├─ mcp/                      # MCP 레이어
+│  │  ├─ client.py              # MCP 클라이언트
+│  │  └─ tools/                 # MCP 툴 구현
+│  │     ├─ file_manager.py     # 파일 시스템
+│  │     ├─ notes.py            # 메모 저장
+│  │     ├─ calendar_mock.py    # Mock 일정
+│  │     ├─ notion_calendar.py  # Notion 일정
+│  │     └─ http_fetcher.py     # HTTP 요청
 │  ├─ data/                     # 데이터 저장소
+│  │  ├─ notes.json             # 메모 데이터
+│  │  └─ calendar.json          # Mock 일정 데이터
 │  └─ utils/                    # 유틸리티
+├─ tests/                       # 테스트 코드
 ├─ logs/                        # 로그 파일
 └─ .env                         # 환경 변수
 ```
+
+## 개발 현황
+
+- ✅ Phase 1: Request Parser (자연어 → 구조화된 요청)
+- ✅ Phase 1.5: Agent Router (Intent → Agent 매핑)
+- ✅ Phase 2: Agents 구현 (File, Note, Calendar, Web, Fallback)
+- ✅ Phase 2.5: MCP Layer (Tools 구현 + Notion 통합)
+- ⏳ Phase 3: E2E Integration
+- ⏳ Phase 3.5: CLI
+- ⏳ Phase 4: Logging & Error Handling
+- ⏳ Phase 5: Testing & Validation
+- ⏳ Phase 6: Documentation & Deployment
