@@ -305,3 +305,154 @@ class TestNoteAgent:
         
         assert result["status"] == "error"
         assert "MCP client not available" in result["message"]
+
+
+
+class TestCalendarAgent:
+    """Test cases for CalendarAgent"""
+    
+    @pytest.fixture
+    def mock_mcp(self):
+        """Create mock MCP client"""
+        mock = MagicMock()
+        mock.call = AsyncMock()
+        return mock
+    
+    @pytest.mark.asyncio
+    async def test_calendar_agent_add_event(self, mock_mcp):
+        """Test CalendarAgent adding an event"""
+        from agents.calendar_agent import CalendarAgent
+        
+        mock_mcp.call.return_value = {
+            "status": "ok",
+            "result": {"id": 1, "title": "Meeting"},
+            "message": "Event added"
+        }
+        
+        agent = CalendarAgent(mcp_client=mock_mcp)
+        result = await agent.handle({
+            "action": "calendar_add",
+            "title": "Meeting",
+            "date": "2024-01-01",
+            "time": "09:00"
+        })
+        
+        assert result["status"] == "ok"
+        mock_mcp.call.assert_called_once()
+    
+    @pytest.mark.asyncio
+    async def test_calendar_agent_list_events(self, mock_mcp):
+        """Test CalendarAgent listing events"""
+        from agents.calendar_agent import CalendarAgent
+        
+        mock_mcp.call.return_value = {
+            "status": "ok",
+            "result": [{"id": 1, "title": "Event 1"}],
+            "message": "Found 1 events"
+        }
+        
+        agent = CalendarAgent(mcp_client=mock_mcp)
+        result = await agent.handle({"action": "list"})
+        
+        assert result["status"] == "ok"
+        mock_mcp.call.assert_called_once_with("calendar_mock", "list_events", {
+            "range_start": None,
+            "range_end": None
+        })
+    
+    @pytest.mark.asyncio
+    async def test_calendar_agent_without_title(self, mock_mcp):
+        """Test CalendarAgent without event title"""
+        from agents.calendar_agent import CalendarAgent
+        
+        agent = CalendarAgent(mcp_client=mock_mcp)
+        result = await agent.handle({"action": "add"})
+        
+        assert result["status"] == "error"
+        assert "title is required" in result["message"]
+
+
+class TestWebAgent:
+    """Test cases for WebAgent"""
+    
+    @pytest.fixture
+    def mock_mcp(self):
+        """Create mock MCP client"""
+        mock = MagicMock()
+        mock.call = AsyncMock()
+        return mock
+    
+    @pytest.mark.asyncio
+    async def test_web_agent_fetch_url(self, mock_mcp):
+        """Test WebAgent fetching a URL"""
+        from agents.web_agent import WebAgent
+        
+        mock_mcp.call.return_value = {
+            "status": "ok",
+            "result": {"text": "content", "status_code": 200},
+            "message": "Fetched"
+        }
+        
+        agent = WebAgent(mcp_client=mock_mcp)
+        result = await agent.handle({"url": "https://example.com"})
+        
+        assert result["status"] == "ok"
+        mock_mcp.call.assert_called_once()
+    
+    @pytest.mark.asyncio
+    async def test_web_agent_search_query(self, mock_mcp):
+        """Test WebAgent with search query"""
+        from agents.web_agent import WebAgent
+        
+        mock_mcp.call.return_value = {
+            "status": "ok",
+            "result": {"text": "search results"},
+            "message": "Fetched"
+        }
+        
+        agent = WebAgent(mcp_client=mock_mcp)
+        result = await agent.handle({"query": "python news"})
+        
+        assert result["status"] == "ok"
+        # Should convert query to URL
+        call_args = mock_mcp.call.call_args
+        assert "url" in call_args[0][2]
+    
+    @pytest.mark.asyncio
+    async def test_web_agent_without_url_or_query(self, mock_mcp):
+        """Test WebAgent without URL or query"""
+        from agents.web_agent import WebAgent
+        
+        agent = WebAgent(mcp_client=mock_mcp)
+        result = await agent.handle({})
+        
+        assert result["status"] == "error"
+        assert "URL or query is required" in result["message"]
+
+
+class TestFallbackAgent:
+    """Test cases for FallbackAgent"""
+    
+    @pytest.mark.asyncio
+    async def test_fallback_agent_handles_unknown(self):
+        """Test FallbackAgent handling unknown request"""
+        from agents.fallback_agent import FallbackAgent
+        
+        agent = FallbackAgent()
+        result = await agent.handle({"unknown": "param"})
+        
+        assert result["status"] == "ok"
+        assert "잘 모르겠어요" in result["message"]
+        assert "params" in result["result"]
+    
+    @pytest.mark.asyncio
+    async def test_fallback_agent_includes_debug_info(self):
+        """Test FallbackAgent includes debug information"""
+        from agents.fallback_agent import FallbackAgent
+        
+        agent = FallbackAgent()
+        params = {"test": "value"}
+        result = await agent.handle(params)
+        
+        assert result["result"]["params"] == params
+        assert result["result"]["agent"] == "FallbackAgent"

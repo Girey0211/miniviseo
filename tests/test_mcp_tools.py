@@ -210,3 +210,136 @@ class TestMCPClient:
         register_tool("test_tool", file_manager)
         client = get_mcp_client()
         assert "test_tool" in client.tools
+
+
+
+class TestCalendarMock:
+    """Test cases for calendar_mock tool"""
+    
+    @pytest.fixture
+    def temp_calendar_file(self, tmp_path, monkeypatch):
+        """Create temporary calendar file for testing"""
+        calendar_file = tmp_path / "test_calendar.json"
+        
+        # Patch CALENDAR_FILE
+        import config
+        monkeypatch.setattr(config, "CALENDAR_FILE", calendar_file)
+        
+        import mcp.tools.calendar_mock as calendar_module
+        monkeypatch.setattr(calendar_module, "CALENDAR_FILE", calendar_file)
+        
+        return calendar_file
+    
+    @pytest.mark.asyncio
+    async def test_add_event(self, temp_calendar_file):
+        """Test adding a calendar event"""
+        from mcp.tools import calendar_mock
+        
+        result = await calendar_mock.add_event(
+            title="Meeting",
+            date="2024-01-01",
+            time="09:00",
+            description="Team meeting"
+        )
+        
+        assert result["status"] == "ok"
+        assert result["result"]["title"] == "Meeting"
+        assert result["result"]["date"] == "2024-01-01"
+        assert result["result"]["time"] == "09:00"
+        assert "id" in result["result"]
+    
+    @pytest.mark.asyncio
+    async def test_add_event_with_relative_date(self, temp_calendar_file):
+        """Test adding event with relative date"""
+        from mcp.tools import calendar_mock
+        
+        result = await calendar_mock.add_event(title="Today's meeting", date="오늘", time="10:00")
+        
+        assert result["status"] == "ok"
+        # Should convert "오늘" to actual date
+        assert result["result"]["date"] != "오늘"
+    
+    @pytest.mark.asyncio
+    async def test_list_events_empty(self, temp_calendar_file):
+        """Test listing events when none exist"""
+        from mcp.tools import calendar_mock
+        
+        result = await calendar_mock.list_events()
+        
+        assert result["status"] == "ok"
+        assert result["result"] == []
+    
+    @pytest.mark.asyncio
+    async def test_list_events_with_data(self, temp_calendar_file):
+        """Test listing events after adding some"""
+        from mcp.tools import calendar_mock
+        
+        await calendar_mock.add_event(title="Event 1", date="2024-01-01")
+        await calendar_mock.add_event(title="Event 2", date="2024-01-02")
+        
+        result = await calendar_mock.list_events()
+        
+        assert result["status"] == "ok"
+        assert len(result["result"]) == 2
+    
+    @pytest.mark.asyncio
+    async def test_list_events_with_date_filter(self, temp_calendar_file):
+        """Test listing events with date range filter"""
+        from mcp.tools import calendar_mock
+        
+        await calendar_mock.add_event(title="Event 1", date="2024-01-01")
+        await calendar_mock.add_event(title="Event 2", date="2024-01-15")
+        await calendar_mock.add_event(title="Event 3", date="2024-02-01")
+        
+        result = await calendar_mock.list_events(range_start="2024-01-10", range_end="2024-01-20")
+        
+        assert result["status"] == "ok"
+        assert len(result["result"]) == 1
+        assert result["result"][0]["title"] == "Event 2"
+
+
+class TestHttpFetcher:
+    """Test cases for http_fetcher tool"""
+    
+    @pytest.mark.asyncio
+    async def test_fetch_success(self):
+        """Test successful HTTP fetch"""
+        from mcp.tools import http_fetcher
+        
+        # Use a reliable test URL
+        result = await http_fetcher.fetch("https://httpbin.org/get")
+        
+        assert result["status"] == "ok"
+        assert result["result"]["status_code"] == 200
+        assert "text" in result["result"]
+    
+    @pytest.mark.asyncio
+    async def test_fetch_invalid_url(self):
+        """Test fetching invalid URL"""
+        from mcp.tools import http_fetcher
+        
+        result = await http_fetcher.fetch("https://this-domain-does-not-exist-12345.com")
+        
+        assert result["status"] == "error"
+    
+    @pytest.mark.asyncio
+    async def test_fetch_timeout(self):
+        """Test fetch with timeout"""
+        from mcp.tools import http_fetcher
+        
+        # Use a URL that will timeout (very short timeout)
+        result = await http_fetcher.fetch("https://httpbin.org/delay/10", timeout=1)
+        
+        assert result["status"] == "error"
+        assert "timeout" in result["message"].lower()
+    
+    @pytest.mark.asyncio
+    async def test_fetch_truncates_large_response(self):
+        """Test that large responses are truncated"""
+        from mcp.tools import http_fetcher
+        
+        # httpbin can return large responses
+        result = await http_fetcher.fetch("https://httpbin.org/base64/SFRUUEJJTiBpcyBhd2Vzb21l" * 1000)
+        
+        if result["status"] == "ok":
+            assert "truncated" in result["result"]
