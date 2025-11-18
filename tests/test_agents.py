@@ -1,10 +1,13 @@
 import pytest
 import sys
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from agents.base import AgentBase
+from agents.file_agent import FileAgent
+from agents.note_agent import NoteAgent
 
 
 # Concrete implementation for testing
@@ -163,3 +166,142 @@ class TestAgentBaseAbstract:
         assert isinstance(agent, AgentBase)
         result = await agent.handle({})
         assert result["status"] == "ok"
+
+
+
+class TestFileAgent:
+    """Test cases for FileAgent"""
+    
+    @pytest.fixture
+    def mock_mcp(self):
+        """Create mock MCP client"""
+        mock = MagicMock()
+        mock.call = AsyncMock()
+        return mock
+    
+    @pytest.mark.asyncio
+    async def test_file_agent_list_files(self, mock_mcp):
+        """Test FileAgent listing files"""
+        mock_mcp.call.return_value = {
+            "status": "ok",
+            "result": [{"name": "test.txt", "type": "file"}],
+            "message": "Found 1 items"
+        }
+        
+        agent = FileAgent(mcp_client=mock_mcp)
+        result = await agent.handle({"path": ".", "action": "list_files"})
+        
+        assert result["status"] == "ok"
+        assert len(result["result"]) == 1
+        mock_mcp.call.assert_called_once_with("file_manager", "list_files", {"path": "."})
+    
+    @pytest.mark.asyncio
+    async def test_file_agent_read_file(self, mock_mcp):
+        """Test FileAgent reading a file"""
+        mock_mcp.call.return_value = {
+            "status": "ok",
+            "result": {"content": "file content"},
+            "message": "File read"
+        }
+        
+        agent = FileAgent(mcp_client=mock_mcp)
+        result = await agent.handle({"path": "test.txt", "action": "read_file"})
+        
+        assert result["status"] == "ok"
+        mock_mcp.call.assert_called_once_with("file_manager", "read_file", {"path": "test.txt"})
+    
+    @pytest.mark.asyncio
+    async def test_file_agent_without_mcp(self):
+        """Test FileAgent without MCP client"""
+        agent = FileAgent()
+        result = await agent.handle({"path": "."})
+        
+        assert result["status"] == "error"
+        assert "MCP client not available" in result["message"]
+    
+    @pytest.mark.asyncio
+    async def test_file_agent_default_path(self, mock_mcp):
+        """Test FileAgent with default path"""
+        mock_mcp.call.return_value = {"status": "ok", "result": [], "message": ""}
+        
+        agent = FileAgent(mcp_client=mock_mcp)
+        result = await agent.handle({})
+        
+        # Should use default path "."
+        mock_mcp.call.assert_called_once()
+        call_args = mock_mcp.call.call_args
+        assert call_args[0][2]["path"] == "."
+
+
+class TestNoteAgent:
+    """Test cases for NoteAgent"""
+    
+    @pytest.fixture
+    def mock_mcp(self):
+        """Create mock MCP client"""
+        mock = MagicMock()
+        mock.call = AsyncMock()
+        return mock
+    
+    @pytest.mark.asyncio
+    async def test_note_agent_write_note(self, mock_mcp):
+        """Test NoteAgent writing a note"""
+        mock_mcp.call.return_value = {
+            "status": "ok",
+            "result": {"id": 1, "text": "Test note"},
+            "message": "Note saved"
+        }
+        
+        agent = NoteAgent(mcp_client=mock_mcp)
+        result = await agent.handle({"text": "Test note", "title": "Test"})
+        
+        assert result["status"] == "ok"
+        mock_mcp.call.assert_called_once_with("notes", "write", {
+            "text": "Test note",
+            "title": "Test"
+        })
+    
+    @pytest.mark.asyncio
+    async def test_note_agent_write_with_content_param(self, mock_mcp):
+        """Test NoteAgent with 'content' parameter"""
+        mock_mcp.call.return_value = {"status": "ok", "result": {}, "message": ""}
+        
+        agent = NoteAgent(mcp_client=mock_mcp)
+        result = await agent.handle({"content": "Note content"})
+        
+        assert result["status"] == "ok"
+        call_args = mock_mcp.call.call_args
+        assert call_args[0][2]["text"] == "Note content"
+    
+    @pytest.mark.asyncio
+    async def test_note_agent_list_notes(self, mock_mcp):
+        """Test NoteAgent listing notes"""
+        mock_mcp.call.return_value = {
+            "status": "ok",
+            "result": [{"id": 1, "text": "Note 1"}],
+            "message": "Found 1 notes"
+        }
+        
+        agent = NoteAgent(mcp_client=mock_mcp)
+        result = await agent.handle({"action": "list_notes"})
+        
+        assert result["status"] == "ok"
+        mock_mcp.call.assert_called_once_with("notes", "list", {})
+    
+    @pytest.mark.asyncio
+    async def test_note_agent_without_text(self, mock_mcp):
+        """Test NoteAgent without text parameter"""
+        agent = NoteAgent(mcp_client=mock_mcp)
+        result = await agent.handle({})
+        
+        assert result["status"] == "error"
+        assert "text is required" in result["message"]
+    
+    @pytest.mark.asyncio
+    async def test_note_agent_without_mcp(self):
+        """Test NoteAgent without MCP client"""
+        agent = NoteAgent()
+        result = await agent.handle({"text": "Test"})
+        
+        assert result["status"] == "error"
+        assert "MCP client not available" in result["message"]
