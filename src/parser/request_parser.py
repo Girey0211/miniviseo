@@ -1,7 +1,13 @@
 import json
+import sys
+from pathlib import Path
+
+# Add src to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from openai import AsyncOpenAI
-from .schemas import ParsedRequest
-from ..config import OPENAI_API_KEY, OPENAI_MODEL, PARSER_PROMPT_PATH
+from parser.schemas import ParsedRequest
+from config import OPENAI_API_KEY, OPENAI_MODEL, PARSER_PROMPT_PATH
 
 
 class RequestParser:

@@ -4,7 +4,7 @@ LLM 기반 개인 비서 토이 프로젝트
 
 ## 설치 방법
 
-### 1. uv 설치 (Python 패키지 매니저)
+### 1. mac 환경 uv 설치 (Python 패키지 매니저)
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -14,24 +14,52 @@ source $HOME/.local/bin/env
 ### 2. 프로젝트 의존성 설치
 
 ```bash
-cd ai-assistant
 uv sync
 ```
 
 ### 3. 환경 변수 설정
 
-`.env` 파일을 생성하고 OpenAI API 키를 설정하세요:
+`.env` 파일에 유효한 OpenAI API 키를 설정하세요:
 
-```bash
-cp .env.example .env
-# .env 파일을 열어서 OPENAI_API_KEY를 실제 키로 변경
+`.env` 파일 예시:
+```
+OPENAI_API_KEY=sk-proj-your-actual-api-key-here
+OPENAI_MODEL=gpt-4o-mini
 ```
 
 ## 실행 방법
 
+### 대화형 모드 (CLI)
+
 ```bash
-uv run python -m src.app
+cd ai-assistant
+uv run python src/app.py
 ```
+
+대화형 모드에서 사용 가능한 명령:
+- `/help` - 도움말 보기
+- `/exit` - 종료
+
+### 단위 테스트 실행
+
+```bash
+cd ai-assistant
+uv run pytest tests/ -v
+```
+
+### 가상환경 활성화 후 실행
+
+```bash
+cd ai-assistant
+source .venv/bin/activate
+python src/app.py
+```
+
+## 주의사항
+
+- **OpenAI API 키 필수**: 유효한 API 키와 충분한 크레딧이 필요합니다
+- API 키가 없거나 quota가 초과된 경우 모든 요청이 `unknown` intent로 fallback됩니다
+- 테스트 실행 시 mock을 사용하므로 API 키 없이도 테스트 가능합니다
 
 ## 지원하는 기능
 
