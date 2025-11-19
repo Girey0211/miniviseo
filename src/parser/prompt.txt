@@ -32,15 +32,30 @@ Parameter extraction rules:
 - For calendar: pass the relevant text as "text" (agent will process with LLM)
 - For web: extract "query" or "url"
 
-CRITICAL: Detect when information gathering is needed BEFORE creating notes/events:
-- Keywords indicating web search needed: "근황", "최근", "뉴스", "정보", "찾아", "검색", "알아봐", "조사"
-- If user asks to save/memo/note information about something they don't have (e.g., "테슬라 근황", "미 증시 현황"):
-  1. FIRST: web_search to gather information
-  2. THEN: write_note or calendar_add with use_results_from: [1]
+CRITICAL RULE - External Information Detection:
+When user wants to save/memo/note/schedule information about EXTERNAL topics (things they don't personally know), you MUST add web_search FIRST.
+
+Ask yourself: "Does the user already have this information, or do they need to look it up?"
+
+Examples of EXTERNAL information (REQUIRES web_search first):
+- Company/stock information: "테슬라", "애플", "삼성전자", "나스닥", "코스피", "증시"
+- Current events/news: any company, person, event, technology, product they're asking about
+- Restaurant/place recommendations: "맛집", "카페", "호텔", "관광지"
+- Weather, sports scores, movie times, etc.
+- ANY topic that requires real-time or external knowledge
+
+Examples of INTERNAL information (NO web_search needed):
+- Personal notes: "오늘 한 일", "내 생각", "회의 내용"
+- Personal schedules: "내일 3시 회의", "다음주 약속"
+- Things user is telling you directly: "프로젝트 완료했어"
+
+Decision Logic:
+1. If topic is about external world/entities → web_search FIRST, then write_note/calendar_add with use_results_from
+2. If topic is personal/internal → directly write_note/calendar_add
 
 IMPORTANT: Analyze the input and extract ALL distinct actions. Execute them in logical order:
 1. Greetings/small talk first (FallbackAgent)
-2. Information gathering (WebAgent) - ALWAYS needed when user asks about external information
+2. Information gathering (WebAgent) - REQUIRED when topic is external/unknown to user
 3. Action execution (NoteAgent, CalendarAgent) - with use_results_from if depends on step 2
 
 use_results_from field:
@@ -51,8 +66,35 @@ use_results_from field:
 
 Examples:
 
-Single action:
+Single action (INTERNAL - no search needed):
 - "메모 작성해줘" -> {{"actions": [{{"intent": "write_note", "agent": "NoteAgent", "params": {{"text": "메모 작성해줘"}}, "use_results_from": []}}]}}
+- "오늘 한 일 기록해줘" -> {{"actions": [{{"intent": "write_note", "agent": "NoteAgent", "params": {{"text": "오늘 한 일 기록해줘"}}, "use_results_from": []}}]}}
+- "내일 3시 회의 일정 추가" -> {{"actions": [{{"intent": "calendar_add", "agent": "CalendarAgent", "params": {{"text": "내일 3시 회의"}}, "use_results_from": []}}]}}
+
+Multiple actions (EXTERNAL - search required):
+- "애플 주가 메모해줘" -> 
+{{
+  "actions": [
+    {{"intent": "web_search", "agent": "WebAgent", "params": {{"query": "애플 주가"}}, "use_results_from": []}},
+    {{"intent": "write_note", "agent": "NoteAgent", "params": {{"text": "애플 주가"}}, "use_results_from": [1]}}
+  ]
+}}
+
+- "삼성전자 실적 노트에 저장" ->
+{{
+  "actions": [
+    {{"intent": "web_search", "agent": "WebAgent", "params": {{"query": "삼성전자 실적"}}, "use_results_from": []}},
+    {{"intent": "write_note", "agent": "NoteAgent", "params": {{"text": "삼성전자 실적"}}, "use_results_from": [1]}}
+  ]
+}}
+
+- "비트코인 시세 기록" ->
+{{
+  "actions": [
+    {{"intent": "web_search", "agent": "WebAgent", "params": {{"query": "비트코인 시세"}}, "use_results_from": []}},
+    {{"intent": "write_note", "agent": "NoteAgent", "params": {{"text": "비트코인 시세"}}, "use_results_from": [1]}}
+  ]
+}}
 
 Multiple actions with dependencies:
 - "토요일 7시에 저녁약속이 있음. 부산역 근처 맛집을 찾아서 일정을 만들어줘" -> 

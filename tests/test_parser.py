@@ -305,6 +305,100 @@ class TestRequestParser:
             assert result.actions[0].intent == "web_search"
             assert result.actions[1].intent == "write_note"
             assert result.actions[1].use_results_from == [1]
+    
+    @pytest.mark.asyncio
+    async def test_parse_external_info_apple_stock(self, parser, mock_openai_response):
+        """Test parsing external info request - Apple stock without explicit keywords"""
+        response_json = '''{"actions": [
+            {"intent": "web_search", "agent": "WebAgent", "params": {"query": "애플 주가"}, "use_results_from": []},
+            {"intent": "write_note", "agent": "NoteAgent", "params": {"text": "애플 주가"}, "use_results_from": [1]}
+        ]}'''
+        
+        with patch.object(parser.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = mock_openai_response(response_json)
+            
+            result = await parser.parse_request("애플 주가 메모해줘")
+            
+            assert isinstance(result, ParsedRequest)
+            assert len(result.actions) == 2
+            assert result.actions[0].intent == "web_search"
+            assert result.actions[0].agent == "WebAgent"
+            assert result.actions[1].intent == "write_note"
+            assert result.actions[1].use_results_from == [1]
+    
+    @pytest.mark.asyncio
+    async def test_parse_external_info_samsung_earnings(self, parser, mock_openai_response):
+        """Test parsing external info request - Samsung earnings"""
+        response_json = '''{"actions": [
+            {"intent": "web_search", "agent": "WebAgent", "params": {"query": "삼성전자 실적"}, "use_results_from": []},
+            {"intent": "write_note", "agent": "NoteAgent", "params": {"text": "삼성전자 실적"}, "use_results_from": [1]}
+        ]}'''
+        
+        with patch.object(parser.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = mock_openai_response(response_json)
+            
+            result = await parser.parse_request("삼성전자 실적 노트에 저장")
+            
+            assert isinstance(result, ParsedRequest)
+            assert len(result.actions) == 2
+            assert result.actions[0].intent == "web_search"
+            assert result.actions[1].intent == "write_note"
+            assert result.actions[1].use_results_from == [1]
+    
+    @pytest.mark.asyncio
+    async def test_parse_external_info_bitcoin_price(self, parser, mock_openai_response):
+        """Test parsing external info request - Bitcoin price"""
+        response_json = '''{"actions": [
+            {"intent": "web_search", "agent": "WebAgent", "params": {"query": "비트코인 시세"}, "use_results_from": []},
+            {"intent": "write_note", "agent": "NoteAgent", "params": {"text": "비트코인 시세"}, "use_results_from": [1]}
+        ]}'''
+        
+        with patch.object(parser.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = mock_openai_response(response_json)
+            
+            result = await parser.parse_request("비트코인 시세 기록")
+            
+            assert isinstance(result, ParsedRequest)
+            assert len(result.actions) == 2
+            assert result.actions[0].intent == "web_search"
+            assert result.actions[1].intent == "write_note"
+            assert result.actions[1].use_results_from == [1]
+    
+    @pytest.mark.asyncio
+    async def test_parse_internal_info_personal_note(self, parser, mock_openai_response):
+        """Test parsing internal info - personal note without search"""
+        response_json = '''{"actions": [
+            {"intent": "write_note", "agent": "NoteAgent", "params": {"text": "오늘 한 일 기록해줘"}, "use_results_from": []}
+        ]}'''
+        
+        with patch.object(parser.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = mock_openai_response(response_json)
+            
+            result = await parser.parse_request("오늘 한 일 기록해줘")
+            
+            assert isinstance(result, ParsedRequest)
+            assert len(result.actions) == 1
+            assert result.actions[0].intent == "write_note"
+            assert result.actions[0].agent == "NoteAgent"
+            assert result.actions[0].use_results_from == []
+    
+    @pytest.mark.asyncio
+    async def test_parse_internal_info_personal_schedule(self, parser, mock_openai_response):
+        """Test parsing internal info - personal schedule without search"""
+        response_json = '''{"actions": [
+            {"intent": "calendar_add", "agent": "CalendarAgent", "params": {"text": "내일 3시 회의"}, "use_results_from": []}
+        ]}'''
+        
+        with patch.object(parser.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = mock_openai_response(response_json)
+            
+            result = await parser.parse_request("내일 3시 회의 일정 추가")
+            
+            assert isinstance(result, ParsedRequest)
+            assert len(result.actions) == 1
+            assert result.actions[0].intent == "calendar_add"
+            assert result.actions[0].agent == "CalendarAgent"
+            assert result.actions[0].use_results_from == []
 
 
 class TestParsedRequestSchema:
