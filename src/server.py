@@ -253,6 +253,22 @@ class HealthResponse(BaseModel):
     version: str
 
 
+class MessageInfo(BaseModel):
+    """
+    메시지 정보
+    
+    Attributes:
+        role: 메시지 역할 (user 또는 assistant)
+        content: 메시지 내용
+        timestamp: 메시지 생성 시각 (ISO 8601 형식)
+        metadata: 추가 메타데이터 (intent, agent 등)
+    """
+    role: str
+    content: str
+    timestamp: str
+    metadata: dict = {}
+
+
 class SessionInfoResponse(BaseModel):
     """
     세션 정보 응답
@@ -262,11 +278,13 @@ class SessionInfoResponse(BaseModel):
         message_count: 세션에 저장된 메시지 수
         created_at: 세션 생성 시각 (ISO 8601 형식)
         last_accessed: 마지막 접근 시각 (ISO 8601 형식)
+        messages: 대화 히스토리 (최근 50개)
     """
     session_id: str
     message_count: int
     created_at: str
     last_accessed: str
+    messages: list[MessageInfo] = []
     
     model_config = {
         "json_schema_extra": {
@@ -275,7 +293,21 @@ class SessionInfoResponse(BaseModel):
                     "session_id": "user-123",
                     "message_count": 10,
                     "created_at": "2025-01-01T10:00:00",
-                    "last_accessed": "2025-01-05T15:30:00"
+                    "last_accessed": "2025-01-05T15:30:00",
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": "안녕하세요",
+                            "timestamp": "2025-01-01T10:00:00",
+                            "metadata": {}
+                        },
+                        {
+                            "role": "assistant",
+                            "content": "안녕하세요! 무엇을 도와드릴까요?",
+                            "timestamp": "2025-01-01T10:00:05",
+                            "metadata": {"intent": "greeting", "agent": "FallbackAgent"}
+                        }
+                    ]
                 }
             ]
         }
@@ -378,34 +410,55 @@ async def health():
 
 
 @app.get("/sessions/{session_id}", response_model=SessionInfoResponse, tags=["Session"])
-async def get_session_info(session_id: str):
+async def get_session_info(session_id: str, limit: int = 50):
     """
-    세션 정보 조회
+    세션 정보 및 대화 히스토리 조회
     
-    특정 세션의 정보를 조회합니다.
+    특정 세션의 정보와 대화 히스토리를 조회합니다.
     
     **Parameters:**
     - **session_id**: 조회할 세션 ID
+    - **limit**: 조회할 메시지 수 (기본값: 50, 최대: 100)
     
     **Returns:**
-    - 세션 ID, 메시지 수, 생성 시각, 마지막 접근 시각
+    - 세션 ID, 메시지 수, 생성 시각, 마지막 접근 시각, 대화 히스토리
     
     **Example:**
     ```
     GET /sessions/user-123
+    GET /sessions/user-123?limit=20
     ```
     """
     session = await _session_manager.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다")
     
+    # Limit validation
+    if limit > 100:
+        limit = 100
+    elif limit < 1:
+        limit = 1
+    
     message_count = await session.get_message_count()
+    messages = await session.get_messages(limit=limit)
+    
+    # Convert messages to MessageInfo format
+    message_infos = [
+        MessageInfo(
+            role=msg["role"],
+            content=msg["content"],
+            timestamp=msg["timestamp"],
+            metadata=msg.get("metadata", {})
+        )
+        for msg in messages
+    ]
     
     return SessionInfoResponse(
         session_id=session.session_id,
         message_count=message_count,
         created_at=session.created_at.isoformat(),
-        last_accessed=session.last_accessed.isoformat()
+        last_accessed=session.last_accessed.isoformat(),
+        messages=message_infos
     )
 
 

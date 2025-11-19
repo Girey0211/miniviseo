@@ -208,7 +208,7 @@ class TestServerSession:
     
     @pytest.mark.asyncio
     async def test_get_session_info(self):
-        """Test getting session info"""
+        """Test getting session info with messages"""
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             session_id = "test-session-info"
@@ -231,6 +231,10 @@ class TestServerSession:
                 assert "message_count" in data
                 assert "created_at" in data
                 assert "last_accessed" in data
+                assert "messages" in data
+                assert isinstance(data["messages"], list)
+                # Should have at least user message and assistant response
+                assert data["message_count"] >= 2
     
     @pytest.mark.asyncio
     async def test_get_nonexistent_session(self):
@@ -271,6 +275,32 @@ class TestServerSession:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.delete("/sessions/nonexistent-session")
             assert response.status_code == 404
+    
+    @pytest.mark.asyncio
+    async def test_get_session_info_with_limit(self):
+        """Test getting session info with message limit"""
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            session_id = "test-session-limit"
+            
+            # Create session with multiple messages
+            for i in range(5):
+                await client.post(
+                    "/assistant",
+                    json={
+                        "text": f"메시지 {i}",
+                        "session_id": session_id
+                    }
+                )
+            
+            # Get session info with limit
+            response = await client.get(f"/sessions/{session_id}?limit=3")
+            
+            if response.status_code == 200:
+                data = response.json()
+                assert data["session_id"] == session_id
+                # Should return only last 3 messages
+                assert len(data["messages"]) <= 3
     
     @pytest.mark.asyncio
     async def test_session_stats(self):
