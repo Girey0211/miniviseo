@@ -52,8 +52,8 @@ OPENAI_API_KEY=sk-proj-your-actual-api-key-here
 OPENAI_MODEL=gpt-4o-mini
 
 # Notion Integration (Required for notes and calendar features)
-NOTION_API_KEY=secret_your_integration_token
-NOTION_DATABASE_ID=your_calendar_database_id
+NOTION_API_KEY=your_integration_token
+NOTION_CALENDAR_DATABASE_ID=your_calendar_database_id
 NOTION_NOTES_DATABASE_ID=your_notes_database_id
 ```
 
@@ -114,7 +114,7 @@ python src/app.py
 
 1. https://www.notion.so/my-integrations 에서 새 Integration 생성
 2. Integration 이름 설정 (예: "AI Assistant")
-3. Integration Token 복사 (secret_로 시작)
+3. Integration Token 복사
 
 ### 2. Notion 데이터베이스 생성
 
@@ -147,8 +147,8 @@ OPENAI_API_KEY=sk-proj-your-actual-api-key-here
 OPENAI_MODEL=gpt-4o-mini
 
 # Notion Integration
-NOTION_API_KEY=secret_your_integration_token
-NOTION_DATABASE_ID=your_calendar_database_id
+NOTION_API_KEY=your_integration_token
+NOTION_CALENDAR_DATABASE_ID=your_calendar_database_id
 NOTION_NOTES_DATABASE_ID=your_notes_database_id
 ```
 
