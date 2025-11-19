@@ -17,7 +17,7 @@ from parser.request_parser import parse_request
 from router.agent_router import route_to_agent, register_agent
 from mcp.client import get_mcp_client, register_tool
 from config import OPENAI_API_KEY, OPENAI_MODEL, LOG_FILE
-from utils.logger import get_logger
+from utils.logger import get_logger, set_console_level
 
 logger = get_logger()
 
@@ -213,6 +213,13 @@ async def main_loop():
             elif user_input.strip() == "/debug":
                 debug_mode = not debug_mode
                 status = "활성화" if debug_mode else "비활성화"
+                
+                # Change console log level based on debug mode
+                if debug_mode:
+                    set_console_level("INFO")
+                else:
+                    set_console_level("WARNING")
+                
                 console.print(f"[yellow]디버그 모드 {status}[/yellow]")
                 logger.info(f"Debug mode toggled: {debug_mode}")
                 continue
