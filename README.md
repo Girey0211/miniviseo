@@ -340,22 +340,26 @@ python src/app.py
 #### 일정 데이터베이스
 
 1. Notion에서 새 Database 생성
-2. 다음 속성 추가:
-   - **제목** (Title) - Title 타입
-   - **날짜** (Date) - Date 타입
-   - **설명** (Description) - Text 타입
+2. **정확히** 다음 속성 추가 (이름과 타입이 정확해야 함):
+   - **제목** (Title 타입) - 데이터베이스의 기본 제목 속성
+   - **날짜** (Date 타입) - 일정 날짜 및 시간
+   - **설명** (Rich Text 타입) - 일정 설명 (선택사항)
 3. Database를 Integration과 연결 (Share → Integration 선택)
 4. Database ID 복사 (URL에서 확인 가능)
+
+**중요**: 속성 이름은 정확히 한글로 `제목`, `날짜`, `설명`이어야 합니다.
 
 #### 메모 데이터베이스
 
 1. Notion에서 새 Database 생성
-2. 다음 속성 추가:
-   - **제목** (Title) - Title 타입
-   - **내용** (Rich Text) - Rich Text 타입
-   - **생성일** (Created) - Created time 타입
+2. **정확히** 다음 속성 추가 (이름과 타입이 정확해야 함):
+   - **제목** (Title 타입) - 데이터베이스의 기본 제목 속성
+   - **내용** (Rich Text 타입) - 메모 내용
+   - **생성일** (Created time 타입) - 자동 생성 시간 (선택사항)
 3. Database를 Integration과 연결 (Share → Integration 선택)
 4. Database ID 복사 (URL에서 확인 가능)
+
+**중요**: 속성 이름은 정확히 한글로 `제목`, `내용`이어야 합니다.
 
 ### 3. 환경 변수 설정
 

@@ -245,9 +245,9 @@ async def add_event(title: str, date: str = "", time: str = "", description: str
             else:
                 notion_date = parsed_date
             
-            # Create page properties (using Korean property names)
+            # Create page properties (try multiple property name variations)
             properties = {
-                "이름": {  # Korean: Name
+                "제목": {  # Korean: Title (most common)
                     "title": [
                         {
                             "text": {
@@ -263,11 +263,15 @@ async def add_event(title: str, date: str = "", time: str = "", description: str
                 }
             }
             
-            # Add tags if description provided (using 태그 property)
+            # Add description if provided (using 설명 property as rich text)
             if description:
-                properties["태그"] = {  # Korean: Tags
-                    "multi_select": [
-                        {"name": description[:100]}  # Limit length
+                properties["설명"] = {  # Korean: Description
+                    "rich_text": [
+                        {
+                            "text": {
+                                "content": description[:2000]  # Notion limit
+                            }
+                        }
                     ]
                 }
             
@@ -319,6 +323,12 @@ async def add_event(title: str, date: str = "", time: str = "", description: str
                 "status": "error",
                 "result": None,
                 "message": "Notion database not found. Please check: 1) Database ID is correct, 2) Integration has access to the database"
+            }
+        elif "400" in error_msg:
+            return {
+                "status": "error",
+                "result": None,
+                "message": f"Notion API error (400 Bad Request). Please check your database properties. Expected properties: '제목' (Title), '날짜' (Date), '설명' (Rich Text). Error: {error_msg}"
             }
         return {
             "status": "error",
