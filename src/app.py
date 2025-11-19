@@ -343,6 +343,19 @@ async def run_once(text: str) -> str:
         return error_response
 
 
+async def cleanup_on_exit():
+    """Cleanup empty session on exit"""
+    try:
+        if _current_session:
+            msg_count = await _current_session.get_message_count()
+            if msg_count == 0:
+                session_id = _current_session.session_id
+                await _session_manager.delete_session(session_id)
+                logger.info(f"Deleted empty session on exit: {session_id}")
+    except Exception as e:
+        logger.error(f"Error during cleanup: {e}")
+
+
 async def main_loop():
     """Main interactive loop"""
     # Initialize app
@@ -356,7 +369,8 @@ async def main_loop():
     
     debug_mode = False
     
-    while True:
+    try:
+        while True:
         try:
             # Get user input
             user_input = Prompt.ask("\n[bold green]You[/bold green]")
@@ -457,13 +471,16 @@ async def main_loop():
             if debug_mode:
                 console.print(f"[dim]로그 파일: {LOG_FILE}[/dim]")
             
-        except KeyboardInterrupt:
-            logger.info("User interrupted with Ctrl+C")
-            console.print("\n[yellow]종료합니다.[/yellow]")
-            break
-        except Exception as e:
-            logger.error(f"Unexpected error in main loop: {str(e)}", exc_info=True)
-            console.print(f"[red]Error: {str(e)}[/red]")
+            except KeyboardInterrupt:
+                logger.info("User interrupted with Ctrl+C")
+                console.print("\n[yellow]종료합니다.[/yellow]")
+                break
+            except Exception as e:
+                logger.error(f"Unexpected error in main loop: {str(e)}", exc_info=True)
+                console.print(f"[red]Error: {str(e)}[/red]")
+    finally:
+        # Cleanup empty session on exit
+        await cleanup_on_exit()
 
 
 def main():
@@ -471,6 +488,7 @@ def main():
     try:
         asyncio.run(main_loop())
     except KeyboardInterrupt:
+        # Handle Ctrl+C gracefully
         pass
 
 
