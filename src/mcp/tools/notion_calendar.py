@@ -245,9 +245,36 @@ async def add_event(title: str, date: str = "", time: str = "", description: str
             else:
                 notion_date = parsed_date
             
-            # Create page properties (try multiple property name variations)
+            # Get database schema to find the correct property names
+            formatted_db_id = _format_database_id(NOTION_CALENDAR_DATABASE_ID)
+            schema_url = f"https://api.notion.com/v1/databases/{formatted_db_id}"
+            
+            with httpx.Client() as schema_client:
+                schema_response = schema_client.get(schema_url, headers=headers)
+                schema_response.raise_for_status()
+                schema_data = schema_response.json()
+                db_properties = schema_data.get("properties", {})
+            
+            # Find the title property name (could be '제목', '이름', 'Name', etc.)
+            title_prop_name = None
+            date_prop_name = "날짜"  # Default
+            description_prop_name = None
+            
+            for prop_name, prop_data in db_properties.items():
+                prop_type = prop_data.get("type", "")
+                if prop_type == "title":
+                    title_prop_name = prop_name
+                elif prop_type == "date" and prop_name in ["날짜", "Date"]:
+                    date_prop_name = prop_name
+                elif prop_type == "rich_text" and prop_name in ["설명", "Description", "내용"]:
+                    description_prop_name = prop_name
+            
+            if not title_prop_name:
+                raise ValueError("No title property found in database")
+            
+            # Create page properties using discovered property names
             properties = {
-                "제목": {  # Korean: Title (most common)
+                title_prop_name: {
                     "title": [
                         {
                             "text": {
@@ -256,16 +283,16 @@ async def add_event(title: str, date: str = "", time: str = "", description: str
                         }
                     ]
                 },
-                "날짜": {  # Korean: Date
+                date_prop_name: {
                     "date": {
                         "start": notion_date
                     }
                 }
             }
             
-            # Add description if provided (using 설명 property as rich text)
-            if description:
-                properties["설명"] = {  # Korean: Description
+            # Add description if provided and property exists
+            if description and description_prop_name:
+                properties[description_prop_name] = {
                     "rich_text": [
                         {
                             "text": {
@@ -291,7 +318,22 @@ async def add_event(title: str, date: str = "", time: str = "", description: str
             url = "https://api.notion.com/v1/pages"
             
             with httpx.Client() as client:
+                # Log request for debugging
+                import sys
+                from pathlib import Path
+                sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+                from utils.logger import get_logger
+                logger = get_logger()
+                logger.debug(f"Notion API request URL: {url}")
+                logger.debug(f"Notion API request body: {body}")
+                
                 response = client.post(url, json=body, headers=headers)
+                
+                logger.debug(f"Notion API response status: {response.status_code}")
+                
+                if response.status_code != 200:
+                    logger.error(f"Notion API error response: {response.text}")
+                
                 response.raise_for_status()
                 return response.json()
         
