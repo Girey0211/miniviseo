@@ -85,6 +85,9 @@ python -m src.app
 
 ```bash
 # 서버 실행 (기본 포트: 8000)
+uv run server
+
+# 또는 Python으로 직접 실행
 uv run python src/server.py
 
 # 또는 uvicorn으로 직접 실행
@@ -93,6 +96,11 @@ uv run uvicorn src.server:app --host 0.0.0.0 --port 8000
 # 개발 모드 (자동 리로드)
 uv run uvicorn src.server:app --reload
 ```
+
+서버 실행 후:
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+- **종료**: Ctrl+C
 
 #### API 엔드포인트
 

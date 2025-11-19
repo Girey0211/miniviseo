@@ -86,9 +86,33 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app
 app = FastAPI(
     title="AI Personal Assistant API",
-    description="LLM-powered personal assistant with natural language processing",
+    description="""
+    ## LLM 기반 개인 비서 API
+    
+    자연어 요청을 처리하여 다양한 작업을 수행합니다.
+    
+    ### 지원 기능
+    - 📝 메모 작성 및 조회 (Notion 통합)
+    - 📅 일정 관리 (Notion 통합)
+    - 🔍 웹 검색 및 요약
+    
+    ### 사용 방법
+    1. `/assistant` 엔드포인트에 POST 요청
+    2. JSON body에 `text` 필드로 자연어 요청 전달
+    3. 응답으로 처리 결과 수신
+    
+    ### 예시
+    ```json
+    {
+      "text": "오늘 한 일 메모해줘: 프로젝트 완료"
+    }
+    ```
+    """,
     version="0.1.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json"
 )
 
 # Add CORS middleware
@@ -103,18 +127,28 @@ app.add_middleware(
 
 # Request/Response models
 class AssistantRequest(BaseModel):
+    """자연어 요청"""
     text: str
     
     model_config = {
         "json_schema_extra": {
-            "examples": [{
-                "text": "오늘 한 일 메모해줘: 프로젝트 완료"
-            }]
+            "examples": [
+                {
+                    "text": "오늘 한 일 메모해줘: 프로젝트 완료"
+                },
+                {
+                    "text": "내일 오후 3시에 팀 회의 추가해줘"
+                },
+                {
+                    "text": "파이썬 최신 뉴스 검색해줘"
+                }
+            ]
         }
     }
 
 
 class AssistantResponse(BaseModel):
+    """처리 결과 응답"""
     response: str
     intent: str
     agent: str
@@ -122,17 +156,26 @@ class AssistantResponse(BaseModel):
     
     model_config = {
         "json_schema_extra": {
-            "examples": [{
-                "response": "메모를 작성했습니다.",
-                "intent": "write_note",
-                "agent": "NoteAgent",
-                "status": "ok"
-            }]
+            "examples": [
+                {
+                    "response": "메모를 작성했습니다.",
+                    "intent": "write_note",
+                    "agent": "NoteAgent",
+                    "status": "ok"
+                },
+                {
+                    "response": "일정을 추가했습니다.",
+                    "intent": "calendar_add",
+                    "agent": "CalendarAgent",
+                    "status": "ok"
+                }
+            ]
         }
     }
 
 
 class HealthResponse(BaseModel):
+    """헬스체크 응답"""
     status: str
     version: str
 
@@ -179,28 +222,61 @@ Intent: {parsed_request.intent}
         return f"작업이 완료되었습니다. 결과: {result.get('result')}"
 
 
-@app.get("/", response_model=HealthResponse)
+@app.get("/", response_model=HealthResponse, tags=["Health"])
 async def root():
-    """Health check endpoint"""
+    """
+    루트 엔드포인트
+    
+    서버 상태를 확인합니다.
+    """
     return HealthResponse(status="ok", version="0.1.0")
 
 
-@app.get("/health", response_model=HealthResponse)
+@app.get("/health", response_model=HealthResponse, tags=["Health"])
 async def health():
-    """Health check endpoint"""
+    """
+    헬스체크 엔드포인트
+    
+    서버가 정상적으로 동작하는지 확인합니다.
+    """
     return HealthResponse(status="ok", version="0.1.0")
 
 
-@app.post("/assistant", response_model=AssistantResponse)
+@app.post("/assistant", response_model=AssistantResponse, tags=["Assistant"])
 async def process_request(request: AssistantRequest):
     """
-    Process natural language request and return response
+    자연어 요청 처리
     
-    Args:
-        request: AssistantRequest with text field
-        
-    Returns:
-        AssistantResponse with response, intent, agent, and status
+    자연어로 작성된 요청을 분석하고 적절한 Agent를 통해 처리합니다.
+    
+    ## 지원하는 요청 유형
+    
+    ### 메모 작성
+    - "오늘 한 일 메모해줘: 프로젝트 완료"
+    - "회의록 작성해줘: 팀 미팅 내용"
+    
+    ### 메모 조회
+    - "내 메모 목록 보여줘"
+    - "메모 리스트 알려줘"
+    
+    ### 일정 추가
+    - "내일 오후 3시에 팀 회의 추가해줘"
+    - "다음주 월요일 오전 10시에 발표 일정 잡아줘"
+    
+    ### 일정 조회
+    - "이번 주 일정 보여줘"
+    - "오늘 일정 알려줘"
+    
+    ### 웹 검색
+    - "파이썬 최신 뉴스 검색해줘"
+    - "OpenAI API 문서 찾아줘"
+    
+    ## 응답 형식
+    
+    - **response**: 자연어로 작성된 응답 메시지
+    - **intent**: 파싱된 의도 (write_note, list_notes, calendar_add, calendar_list, web_search 등)
+    - **agent**: 요청을 처리한 Agent 이름
+    - **status**: 처리 상태 (ok 또는 error)
     """
     try:
         logger.info(f"API request received: {request.text}")
@@ -255,7 +331,25 @@ async def process_request(request: AssistantRequest):
 def main():
     """Entry point for server"""
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import signal
+    
+    def signal_handler(sig, frame):
+        logger.info("Received shutdown signal, stopping server...")
+        sys.exit(0)
+    
+    # Register signal handlers for graceful shutdown
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    logger.info("Starting AI Personal Assistant API Server...")
+    logger.info("Swagger UI: http://0.0.0.0:8000/docs")
+    logger.info("ReDoc: http://0.0.0.0:8000/redoc")
+    logger.info("Press Ctrl+C to stop")
+    
+    try:
+        uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+    except KeyboardInterrupt:
+        logger.info("Server stopped by user")
 
 
 if __name__ == "__main__":
