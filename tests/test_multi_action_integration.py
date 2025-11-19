@@ -280,3 +280,74 @@ class TestMultiActionContextPassing:
             # The text should contain the summary from web search
             assert search_summary in note_data["text"]
             assert "참고 링크" in note_data["text"]
+
+    @pytest.mark.asyncio
+    async def test_web_search_to_note_with_text_param(self, mock_mcp_client, mock_llm_client):
+        """Test that previous_results are used even when text param is provided"""
+        # Setup web agent
+        web_agent = WebAgent(mcp_client=mock_mcp_client)
+        
+        # Mock search and fetch operations
+        mock_mcp_client.call.side_effect = [
+            # Search call
+            {
+                "status": "ok",
+                "result": [
+                    {"title": "테슬라 이슈", "url": "http://example.com/1"},
+                    {"title": "테슬라 뉴스", "url": "http://example.com/2"}
+                ]
+            },
+            # Fetch first result
+            {
+                "status": "ok",
+                "result": {"text": "테슬라가 새로운 모델을 출시했습니다."}
+            },
+            # Fetch second result
+            {
+                "status": "ok",
+                "result": {"text": "테슬라 주가가 상승했습니다."}
+            }
+        ]
+        
+        # Mock LLM summarization
+        search_summary = "테슬라 최근 이슈:\n1. 테슬라가 새로운 모델을 출시했습니다.\n2. 테슬라 주가가 상승했습니다."
+        with patch.object(web_agent, '_summarize_with_llm', return_value=search_summary):
+            web_params = {"intent": "web_search", "query": "오늘 테슬라 이슈"}
+            web_result = await web_agent.handle(web_params)
+            assert web_result["status"] == "ok"
+        
+        # Setup note agent with fresh mock
+        note_mock_mcp = MagicMock()
+        note_mock_mcp.call = AsyncMock()
+        note_agent = NoteAgent(mcp_client=note_mock_mcp, llm_client=mock_llm_client)
+        
+        # Mock title generation
+        with patch.object(note_agent, '_generate_title', return_value="테슬라 이슈 요약"):
+            # Mock note creation
+            note_result = {"status": "ok", "result": "Note created", "message": "Note saved to Notion"}
+            note_mock_mcp.call.return_value = note_result
+            
+            # Execute note creation with BOTH text param AND previous results
+            # This simulates: "오늘 테슬라 이슈 요약해서 메모에 정리해"
+            note_params = {
+                "intent": "write_note",
+                "text": "오늘 테슬라 이슈",  # Parser includes this
+                "previous_results": [
+                    {"action": 1, "intent": "web_search", "agent": "WebAgent", "result": web_result}
+                ]
+            }
+            
+            result = await note_agent.handle(note_params)
+            
+            assert result["status"] == "ok"
+            # Verify that notion_notes.write was called with the SEARCH RESULT, not the text param
+            call_args = note_mock_mcp.call.call_args
+            assert call_args[0][0] == "notion_notes"
+            assert call_args[0][1] == "write"
+            note_data = call_args[0][2]
+            assert note_data["title"] == "테슬라 이슈 요약"
+            # The text should contain the summary from web search, NOT just "오늘 테슬라 이슈"
+            assert search_summary in note_data["text"]
+            assert "참고 링크" in note_data["text"]
+            # Make sure it's not just using the text param
+            assert "새로운 모델" in note_data["text"] or "주가가 상승" in note_data["text"]

@@ -88,8 +88,9 @@ class NoteAgent(AgentBase):
                 
                 # Check if there are previous results to incorporate
                 previous_results = params.get("previous_results", [])
-                if previous_results and not text:
+                if previous_results:
                     # Extract content from previous results (e.g., web search results)
+                    # ALWAYS use previous results if available, regardless of text parameter
                     for prev in previous_results:
                         # Skip FallbackAgent results (they contain debug info, not useful content)
                         if prev.get("agent") == "FallbackAgent":
