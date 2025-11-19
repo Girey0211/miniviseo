@@ -36,6 +36,8 @@ dev = [
 ai-assistant = "src.app:main"
 assistant = "src.app:main"
 aia = "src.app:main"
+ai = "src.app:main"
+viseo = "src.app:main"
 
 [tool.uv]
 package = true

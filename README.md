@@ -15,7 +15,7 @@ uv sync
 # OPENAI_API_KEY=sk-proj-your-key-here
 
 # 4. 실행
-uv run aia
+uv run ai
 ```
 
 ## 설치 방법
