@@ -355,7 +355,10 @@ async def add_event(title: str, date: str = "", time: str = "", description: str
             
             url = "https://api.notion.com/v1/pages"
             
-            with httpx.Client() as client:
+            # Use longer timeout for requests with page content
+            timeout = httpx.Timeout(30.0, connect=10.0)
+            
+            with httpx.Client(timeout=timeout) as client:
                 # Log request for debugging
                 import sys
                 from pathlib import Path
