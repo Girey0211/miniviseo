@@ -244,7 +244,15 @@ Rules:
                 if not event_data["title"]:
                     return self._create_error_response("Event title is required")
                 
+                # Log event data for debugging
+                from utils.logger import get_logger
+                logger = get_logger()
+                logger.debug(f"Creating calendar event with data: {event_data}")
+                
                 result = await self.mcp.call("notion_calendar", "add_event", event_data)
+                
+                # Log result for debugging
+                logger.debug(f"Calendar event creation result: {result}")
             else:
                 # List events - extract date range from raw input using LLM
                 raw_text = params.get("text") or params.get("raw_text", "")
@@ -265,6 +273,9 @@ Rules:
             return result
             
         except Exception as e:
+            from utils.logger import get_logger
+            logger = get_logger()
+            logger.error(f"Error in CalendarAgent.handle: {str(e)}", exc_info=True)
             return self._create_error_response(
                 message=f"Error handling calendar operation",
                 error=e

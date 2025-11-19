@@ -680,6 +680,12 @@ async def process_request(request: AssistantRequest):
             result = await agent.handle(params_with_context)
             logger.debug(f"Action {idx} result: {result.get('status')} - {result.get('message', '')}")
             
+            # Log error details if action failed
+            if result.get("status") == "error":
+                logger.error(f"Action {idx} failed: {result.get('message', 'Unknown error')}")
+                if "result" in result:
+                    logger.error(f"Error details: {result.get('result')}")
+            
             action_results.append(result)
             previous_results.append({
                 "action": idx,
