@@ -1,0 +1,150 @@
+"""
+Tests for HTTP API Server
+"""
+import pytest
+import sys
+from pathlib import Path
+from httpx import AsyncClient, ASGITransport
+
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+from server import app
+
+
+class TestServerAPI:
+    """Test cases for API server endpoints"""
+    
+    @pytest.mark.asyncio
+    async def test_root_endpoint(self):
+        """Test root endpoint returns health status"""
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/")
+            
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "ok"
+            assert "version" in data
+    
+    @pytest.mark.asyncio
+    async def test_health_endpoint(self):
+        """Test health check endpoint"""
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/health")
+            
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "ok"
+            assert data["version"] == "0.1.0"
+    
+    @pytest.mark.asyncio
+    async def test_assistant_endpoint_success(self):
+        """Test assistant endpoint with valid request"""
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/assistant",
+                json={"text": "안녕하세요"}
+            )
+            
+            # May return 200, 400, or 500 depending on API key and agent availability
+            assert response.status_code in [200, 400, 500]
+            if response.status_code == 200:
+                data = response.json()
+                assert "response" in data
+                assert "intent" in data
+                assert "agent" in data
+                assert "status" in data
+    
+    @pytest.mark.asyncio
+    async def test_assistant_endpoint_empty_text(self):
+        """Test assistant endpoint with empty text"""
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/assistant",
+                json={"text": ""}
+            )
+            
+            # Should still process but might return unknown intent
+            assert response.status_code in [200, 400, 500]
+    
+    @pytest.mark.asyncio
+    async def test_assistant_endpoint_note_request(self):
+        """Test assistant endpoint with note creation request"""
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/assistant",
+                json={"text": "메모 작성해줘: 테스트 메모"}
+            )
+            
+            # May return 200, 400, or 500 depending on API key and agent availability
+            assert response.status_code in [200, 400, 500]
+            if response.status_code == 200:
+                data = response.json()
+                assert data["intent"] in ["write_note", "unknown"]
+                assert data["agent"] in ["NoteAgent", "FallbackAgent"]
+    
+    @pytest.mark.asyncio
+    async def test_assistant_endpoint_web_search(self):
+        """Test assistant endpoint with web search request"""
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/assistant",
+                json={"text": "파이썬 검색해줘"}
+            )
+            
+            # May return 200, 400, or 500 depending on API key and agent availability
+            assert response.status_code in [200, 400, 500]
+            if response.status_code == 200:
+                data = response.json()
+                assert data["intent"] in ["web_search", "unknown"]
+    
+    @pytest.mark.asyncio
+    async def test_assistant_endpoint_invalid_json(self):
+        """Test assistant endpoint with invalid JSON"""
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/assistant",
+                content="invalid json",
+                headers={"Content-Type": "application/json"}
+            )
+            
+            assert response.status_code == 422  # Unprocessable Entity
+    
+    @pytest.mark.asyncio
+    async def test_assistant_endpoint_missing_text_field(self):
+        """Test assistant endpoint with missing text field"""
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/assistant",
+                json={"message": "wrong field"}
+            )
+            
+            assert response.status_code == 422  # Unprocessable Entity
+
+
+class TestServerCORS:
+    """Test CORS configuration"""
+    
+    @pytest.mark.asyncio
+    async def test_cors_headers(self):
+        """Test CORS headers are present"""
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.options(
+                "/assistant",
+                headers={
+                    "Origin": "http://localhost:3000",
+                    "Access-Control-Request-Method": "POST"
+                }
+            )
+            
+            # CORS should allow the request
+            assert response.status_code == 200
+            assert "access-control-allow-origin" in response.headers

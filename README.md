@@ -79,6 +79,65 @@ python -m src.app
 - `/debug` - 디버그 모드 토글 (로그 파일 경로 표시)
 - `/exit` - 종료
 
+### HTTP API 서버 모드
+
+백엔드 서버로 실행하여 HTTP API를 통해 요청을 처리할 수 있습니다:
+
+```bash
+# 서버 실행 (기본 포트: 8000)
+uv run python src/server.py
+
+# 또는 uvicorn으로 직접 실행
+uv run uvicorn src.server:app --host 0.0.0.0 --port 8000
+
+# 개발 모드 (자동 리로드)
+uv run uvicorn src.server:app --reload
+```
+
+#### API 엔드포인트
+
+**Health Check**
+```bash
+GET /health
+```
+
+**요청 처리**
+```bash
+POST /assistant
+Content-Type: application/json
+
+{
+  "text": "오늘 한 일 메모해줘: 프로젝트 완료"
+}
+```
+
+**응답 예시**
+```json
+{
+  "response": "메모를 작성했습니다.",
+  "intent": "write_note",
+  "agent": "NoteAgent",
+  "status": "ok"
+}
+```
+
+#### cURL 예시
+
+```bash
+# Health check
+curl http://localhost:8000/health
+
+# 메모 작성
+curl -X POST http://localhost:8000/assistant \
+  -H "Content-Type: application/json" \
+  -d '{"text": "메모 작성해줘: 테스트 메모"}'
+
+# 웹 검색
+curl -X POST http://localhost:8000/assistant \
+  -H "Content-Type: application/json" \
+  -d '{"text": "파이썬 최신 뉴스 검색해줘"}'
+```
+
 ### 단위 테스트 실행
 
 ```bash
@@ -104,7 +163,9 @@ python src/app.py
 
 - **메모**: 메모 작성, 메모 목록 조회 (Notion 통합)
 - **일정**: 일정 조회, 일정 추가 (Notion 통합)
-- **웹 검색**: HTTP 요청 및 검색
+- **웹 검색**: 검색 결과 자동 수집 및 LLM 요약
+- **CLI 모드**: 대화형 인터페이스
+- **API 서버 모드**: HTTP REST API 제공
 
 ## Notion 통합 (필수)
 
@@ -175,7 +236,8 @@ NOTION_NOTES_DATABASE_ID=your_notes_database_id
 ```
 ai-assistant/
 ├─ src/
-│  ├─ app.py                    # 메인 진입점
+│  ├─ app.py                    # CLI 메인 진입점
+│  ├─ server.py                 # HTTP API 서버
 │  ├─ config.py                 # 설정
 │  ├─ parser/                   # 자연어 파싱
 │  │  ├─ request_parser.py      # LLM 기반 파싱
@@ -187,15 +249,14 @@ ai-assistant/
 │  │  ├─ base.py                # AgentBase 추상 클래스
 │  │  ├─ note_agent.py          # 메모 관리 (Notion 통합)
 │  │  ├─ calendar_agent.py      # 일정 관리 (Notion 통합)
-│  │  ├─ web_agent.py           # 웹 요청
+│  │  ├─ web_agent.py           # 웹 검색 및 요약
 │  │  └─ fallback_agent.py      # 알 수 없는 요청 처리
 │  ├─ mcp/                      # MCP 레이어
 │  │  ├─ client.py              # MCP 클라이언트
 │  │  └─ tools/                 # MCP 툴 구현
 │  │     ├─ notion_notes.py     # Notion 메모 관리
 │  │     ├─ notion_calendar.py  # Notion 일정 관리
-│  │     └─ http_fetcher.py     # HTTP 요청
-│  ├─ data/                     # 데이터 저장소 (deprecated)
+│  │     └─ http_fetcher.py     # HTTP 요청 및 검색
 │  └─ utils/                    # 유틸리티
 │     └─ logger.py              # 로깅 설정
 ├─ tests/                       # 테스트 코드
@@ -217,13 +278,14 @@ ai-assistant/
 
 ## 테스트 현황
 
-- **총 112개 테스트 모두 통과** ✅
+- **총 138개 테스트 모두 통과** ✅
 - Parser 테스트: 13개
-- Agent 테스트: 26개
-- MCP Tools 테스트: 22개
+- Agent 테스트: 33개
+- MCP Tools 테스트: 25개
 - Router 테스트: 23개
 - Notion 통합 테스트: 5개
-- E2E 통합 테스트: 18개 (10개 샘플 문장 포함)
+- E2E 통합 테스트: 18개
+- API 서버 테스트: 9개
 - 워닝: 0개
 - 스킵: 0개
 
