@@ -105,18 +105,49 @@ app = FastAPI(
     - 📝 메모 작성 및 조회 (Notion 통합)
     - 📅 일정 관리 (Notion 통합)
     - 🔍 웹 검색 및 요약
+    - 💬 세션 기반 대화 히스토리 관리
     
-    ### 사용 방법
+    ### 기본 사용 방법 (세션 없이)
     1. `/assistant` 엔드포인트에 POST 요청
     2. JSON body에 `text` 필드로 자연어 요청 전달
     3. 응답으로 처리 결과 수신
     
-    ### 예시
     ```json
     {
       "text": "오늘 한 일 메모해줘: 프로젝트 완료"
     }
     ```
+    
+    ### 세션 기반 대화 (권장)
+    `session_id`를 포함하면 대화 히스토리가 유지됩니다.
+    
+    **첫 번째 요청:**
+    ```json
+    {
+      "text": "안녕하세요",
+      "session_id": "user-123"
+    }
+    ```
+    
+    **두 번째 요청 (같은 세션):**
+    ```json
+    {
+      "text": "아까 말한 내용 기억해?",
+      "session_id": "user-123"
+    }
+    ```
+    
+    ### 세션 관리
+    - **자동 생성**: `session_id`를 처음 사용하면 자동으로 세션 생성
+    - **만료 기한**: 세션 생성 시 7일 후 만료
+    - **자동 갱신**: 세션 사용 시마다 만료 기한 7일 연장
+    - **자동 정리**: 만료된 세션은 자동으로 삭제
+    - **세션 ID 형식**: 자유롭게 지정 가능 (예: "user-123", "session-abc-def")
+    
+    ### 세션 관리 API
+    - `GET /sessions/{session_id}` - 세션 정보 조회
+    - `DELETE /sessions/{session_id}` - 세션 삭제
+    - `GET /sessions-stats` - 전체 세션 통계
     """,
     version="0.1.0",
     lifespan=lifespan,
@@ -137,7 +168,13 @@ app.add_middleware(
 
 # Request/Response models
 class AssistantRequest(BaseModel):
-    """자연어 요청"""
+    """
+    자연어 요청
+    
+    Attributes:
+        text: 자연어로 작성된 요청 내용
+        session_id: 세션 ID (선택사항). 제공하면 대화 히스토리가 유지됩니다.
+    """
     text: str
     session_id: Optional[str] = None
     
@@ -146,14 +183,18 @@ class AssistantRequest(BaseModel):
             "examples": [
                 {
                     "text": "오늘 한 일 메모해줘: 프로젝트 완료",
-                    "session_id": "user-123-session"
+                    "session_id": "user-123"
                 },
                 {
                     "text": "내일 오후 3시에 팀 회의 추가해줘",
-                    "session_id": "user-123-session"
+                    "session_id": "user-123"
                 },
                 {
                     "text": "파이썬 최신 뉴스 검색해줘"
+                },
+                {
+                    "text": "안녕하세요, 메모 작성 도와주세요",
+                    "session_id": "session-abc-def-123"
                 }
             ]
         }
@@ -161,7 +202,16 @@ class AssistantRequest(BaseModel):
 
 
 class AssistantResponse(BaseModel):
-    """처리 결과 응답"""
+    """
+    처리 결과 응답
+    
+    Attributes:
+        response: 자연어로 작성된 응답 메시지
+        intent: 파싱된 의도 (write_note, list_notes, calendar_add, etc.)
+        agent: 요청을 처리한 Agent 이름
+        status: 처리 상태 (ok 또는 error)
+        session_id: 세션 ID (요청에 포함된 경우)
+    """
     response: str
     intent: str
     agent: str
@@ -176,14 +226,21 @@ class AssistantResponse(BaseModel):
                     "intent": "write_note",
                     "agent": "NoteAgent",
                     "status": "ok",
-                    "session_id": "user-123-session"
+                    "session_id": "user-123"
                 },
                 {
                     "response": "일정을 추가했습니다.",
                     "intent": "calendar_add",
                     "agent": "CalendarAgent",
                     "status": "ok",
-                    "session_id": "user-123-session"
+                    "session_id": "user-123"
+                },
+                {
+                    "response": "검색 결과를 요약했습니다: ...",
+                    "intent": "web_search",
+                    "agent": "WebAgent",
+                    "status": "ok",
+                    "session_id": None
                 }
             ]
         }
@@ -197,17 +254,55 @@ class HealthResponse(BaseModel):
 
 
 class SessionInfoResponse(BaseModel):
-    """세션 정보 응답"""
+    """
+    세션 정보 응답
+    
+    Attributes:
+        session_id: 세션 ID
+        message_count: 세션에 저장된 메시지 수
+        created_at: 세션 생성 시각 (ISO 8601 형식)
+        last_accessed: 마지막 접근 시각 (ISO 8601 형식)
+    """
     session_id: str
     message_count: int
     created_at: str
     last_accessed: str
+    
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "session_id": "user-123",
+                    "message_count": 10,
+                    "created_at": "2025-01-01T10:00:00",
+                    "last_accessed": "2025-01-05T15:30:00"
+                }
+            ]
+        }
+    }
 
 
 class SessionStatsResponse(BaseModel):
-    """세션 통계 응답"""
+    """
+    세션 통계 응답
+    
+    Attributes:
+        active_sessions: 현재 활성 세션 수
+        total_messages: 전체 메시지 수
+    """
     active_sessions: int
     total_messages: int
+    
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "active_sessions": 42,
+                    "total_messages": 1337
+                }
+            ]
+        }
+    }
 
 
 async def summarize_result(result: dict, parsed_request, conversation_history: list = None) -> str:
@@ -288,6 +383,17 @@ async def get_session_info(session_id: str):
     세션 정보 조회
     
     특정 세션의 정보를 조회합니다.
+    
+    **Parameters:**
+    - **session_id**: 조회할 세션 ID
+    
+    **Returns:**
+    - 세션 ID, 메시지 수, 생성 시각, 마지막 접근 시각
+    
+    **Example:**
+    ```
+    GET /sessions/user-123
+    ```
     """
     session = await _session_manager.get_session(session_id)
     if not session:
@@ -308,7 +414,20 @@ async def delete_session(session_id: str):
     """
     세션 삭제
     
-    특정 세션과 대화 히스토리를 삭제합니다.
+    특정 세션과 대화 히스토리를 완전히 삭제합니다.
+    
+    **Parameters:**
+    - **session_id**: 삭제할 세션 ID
+    
+    **Returns:**
+    - 삭제 성공 메시지
+    
+    **Example:**
+    ```
+    DELETE /sessions/user-123
+    ```
+    
+    **Note:** 삭제된 세션은 복구할 수 없습니다.
     """
     deleted = await _session_manager.delete_session(session_id)
     if not deleted:
@@ -323,6 +442,15 @@ async def get_session_stats():
     세션 통계 조회
     
     현재 활성화된 세션 통계를 조회합니다.
+    
+    **Returns:**
+    - **active_sessions**: 현재 활성 세션 수
+    - **total_messages**: 전체 메시지 수
+    
+    **Example:**
+    ```
+    GET /sessions-stats
+    ```
     """
     active_count = await _session_manager.get_active_session_count()
     total_messages = await _session_manager.get_total_message_count()
