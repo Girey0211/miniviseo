@@ -222,20 +222,34 @@ class AssistantRequest(BaseModel):
     }
 
 
+class ActionInfo(BaseModel):
+    """
+    실행된 액션 정보
+    
+    Attributes:
+        intent: 파싱된 의도
+        agent: 요청을 처리한 Agent 이름
+        status: 처리 상태 (ok 또는 error)
+    """
+    intent: str
+    agent: str
+    status: str
+
+
 class AssistantResponse(BaseModel):
     """
     처리 결과 응답
     
     Attributes:
         response: 자연어로 작성된 응답 메시지
-        intent: 파싱된 의도 (write_note, list_notes, calendar_add, etc.)
-        agent: 요청을 처리한 Agent 이름
-        status: 처리 상태 (ok 또는 error)
+        action_count: 실행된 액션 수
+        actions: 실행된 액션들의 정보
+        status: 전체 처리 상태 (ok 또는 error)
         session_id: 세션 ID (요청에 포함된 경우)
     """
     response: str
-    intent: str
-    agent: str
+    action_count: int
+    actions: list[ActionInfo]
     status: str
     session_id: Optional[str] = None
     
@@ -244,24 +258,23 @@ class AssistantResponse(BaseModel):
             "examples": [
                 {
                     "response": "메모를 작성했습니다.",
-                    "intent": "write_note",
-                    "agent": "NoteAgent",
+                    "action_count": 1,
+                    "actions": [
+                        {"intent": "write_note", "agent": "NoteAgent", "status": "ok"}
+                    ],
                     "status": "ok",
                     "session_id": "user-123"
                 },
                 {
-                    "response": "일정을 추가했습니다.",
-                    "intent": "calendar_add",
-                    "agent": "CalendarAgent",
+                    "response": "안녕하세요! 부산역 주변 맛집을 찾아서 내일 3시에 일정을 추가했습니다.",
+                    "action_count": 3,
+                    "actions": [
+                        {"intent": "unknown", "agent": "FallbackAgent", "status": "ok"},
+                        {"intent": "web_search", "agent": "WebAgent", "status": "ok"},
+                        {"intent": "calendar_add", "agent": "CalendarAgent", "status": "ok"}
+                    ],
                     "status": "ok",
                     "session_id": "user-123"
-                },
-                {
-                    "response": "검색 결과를 요약했습니다: ...",
-                    "intent": "web_search",
-                    "agent": "WebAgent",
-                    "status": "ok",
-                    "session_id": None
                 }
             ]
         }
@@ -358,30 +371,51 @@ class SessionStatsResponse(BaseModel):
     }
 
 
-async def summarize_result(result: dict, parsed_request, conversation_history: list = None) -> str:
+async def summarize_multi_action_results(
+    action_results: list,
+    parsed_request,
+    conversation_history: list = None
+) -> str:
     """
-    Generate natural language response from agent result using LLM
+    Generate natural language response from multiple action results using LLM
     
     Args:
-        result: Result dictionary from agent
-        parsed_request: Original parsed request
+        action_results: List of result dictionaries from agents
+        parsed_request: Original parsed request with actions
         conversation_history: Previous conversation messages for context
         
     Returns:
         Natural language response string
     """
-    if result.get("status") == "error":
-        return f"죄송합니다. 오류가 발생했습니다: {result.get('message', '알 수 없는 오류')}"
+    # Check if any action failed
+    errors = [r for r in action_results if r.get("status") == "error"]
+    if errors and len(errors) == len(action_results):
+        return f"죄송합니다. 모든 작업이 실패했습니다: {errors[0].get('message', '알 수 없는 오류')}"
+    
+    # Build detailed results for LLM
+    action_details = []
+    for idx, (action, result) in enumerate(zip(parsed_request.actions, action_results), 1):
+        action_details.append(f"""
+작업 {idx}:
+- Intent: {action.intent}
+- Agent: {action.agent}
+- 상태: {result.get('status')}
+- 결과: {result.get('result')}
+- 메시지: {result.get('message', '')}
+""")
     
     # Create prompt for LLM to generate natural response
     prompt = f"""사용자의 요청: "{parsed_request.raw_text}"
-Intent: {parsed_request.intent}
-실행 결과: {result.get('result')}
 
-위 실행 결과를 바탕으로 사용자에게 자연스러운 한국어로 응답을 생성해주세요.
+실행된 작업들:
+{''.join(action_details)}
+
+위 실행 결과들을 바탕으로 사용자에게 자연스러운 한국어로 통합된 응답을 생성해주세요.
+- 모든 작업의 결과를 자연스럽게 연결하여 설명
 - 간결하고 명확하게 작성
 - 결과의 핵심 정보를 포함
-- 친근한 톤 사용"""
+- 친근한 톤 사용
+- 작업이 여러 개인 경우, 순서대로 설명"""
 
     try:
         # Build messages with conversation history
@@ -400,14 +434,16 @@ Intent: {parsed_request.intent}
             model=OPENAI_MODEL,
             messages=messages,
             temperature=0.7,
-            max_tokens=500
+            max_tokens=1000
         )
         
         return response.choices[0].message.content.strip()
         
     except Exception as e:
-        logger.error(f"Error in summarize_result: {str(e)}")
-        return f"작업이 완료되었습니다. 결과: {result.get('result')}"
+        # Fallback to simple response if LLM fails
+        logger.error(f"Error in summarize_multi_action_results: {str(e)}")
+        success_count = len([r for r in action_results if r.get("status") == "ok"])
+        return f"{success_count}개의 작업이 완료되었습니다."
 
 
 @app.get("/", response_model=HealthResponse, tags=["Health"])
@@ -542,45 +578,37 @@ async def get_session_stats():
 @app.post("/assistant", response_model=AssistantResponse, tags=["Assistant"])
 async def process_request(request: AssistantRequest):
     """
-    자연어 요청 처리
+    자연어 요청 처리 (다중 액션 지원)
     
     자연어로 작성된 요청을 분석하고 적절한 Agent를 통해 처리합니다.
+    한 번의 요청에서 여러 작업을 순차적으로 실행할 수 있습니다.
     
     ## 세션 기반 대화
     
     - **session_id**: 클라이언트에서 제공하는 세션 ID (선택사항)
     - 세션 ID를 제공하면 대화 히스토리가 유지됩니다
     - 세션 ID가 없으면 단일 요청으로 처리됩니다
-    - 세션은 60분 동안 유지되며, 이후 자동으로 삭제됩니다
+    - 세션은 7일 동안 유지되며, 사용 시마다 자동 갱신됩니다
     
     ## 지원하는 요청 유형
     
-    ### 메모 작성
+    ### 단일 작업
     - "오늘 한 일 메모해줘: 프로젝트 완료"
-    - "회의록 작성해줘: 팀 미팅 내용"
-    
-    ### 메모 조회
-    - "내 메모 목록 보여줘"
-    - "메모 리스트 알려줘"
-    
-    ### 일정 추가
     - "내일 오후 3시에 팀 회의 추가해줘"
-    - "다음주 월요일 오전 10시에 발표 일정 잡아줘"
-    
-    ### 일정 조회
-    - "이번 주 일정 보여줘"
-    - "오늘 일정 알려줘"
-    
-    ### 웹 검색
     - "파이썬 최신 뉴스 검색해줘"
-    - "OpenAI API 문서 찾아줘"
+    
+    ### 다중 작업 (새로운 기능!)
+    - "안녕, 내일 3시에 밥을 먹을거라 부산역 주변 맛집 찾아서 일정 만들어"
+      → 1) 인사 응답 2) 웹 검색 3) 일정 추가
+    - "파이썬 최신 뉴스 검색하고 메모해줘"
+      → 1) 웹 검색 2) 메모 작성
     
     ## 응답 형식
     
-    - **response**: 자연어로 작성된 응답 메시지
-    - **intent**: 파싱된 의도 (write_note, list_notes, calendar_add, calendar_list, web_search 등)
-    - **agent**: 요청을 처리한 Agent 이름
-    - **status**: 처리 상태 (ok 또는 error)
+    - **response**: 자연어로 작성된 통합 응답 메시지
+    - **action_count**: 실행된 액션 수
+    - **actions**: 각 액션의 intent, agent, status 정보
+    - **status**: 전체 처리 상태 (ok 또는 error)
     - **session_id**: 세션 ID (제공된 경우)
     """
     try:
@@ -588,6 +616,7 @@ async def process_request(request: AssistantRequest):
         
         # Get or create session if session_id provided
         conversation_history = None
+        session = None
         if request.session_id:
             session = await _session_manager.get_or_create_session(request.session_id)
             # Add user message to history
@@ -597,56 +626,111 @@ async def process_request(request: AssistantRequest):
             message_count = await session.get_message_count()
             logger.debug(f"Using session: {request.session_id} (history: {message_count} messages)")
         
-        # Step 1: Parse request
+        # Step 1: Parse request (may contain multiple actions)
         parsed = await parse_request(request.text)
-        logger.debug(f"Parsed - Intent: {parsed.intent}, Agent: {parsed.agent}")
+        logger.debug(f"Parsed request with {len(parsed.actions)} action(s)")
         
-        # Step 2: Route to agent
-        agent_class = route_to_agent(parsed)
+        # Step 2: Execute each action sequentially
+        action_results = []
+        previous_results = []  # Store results for context in later actions
         
-        if agent_class is None:
-            logger.warning("No agent found for request")
-            raise HTTPException(status_code=400, detail="요청을 처리할 수 없습니다")
-        
-        # Get agent instance
-        agent = _agent_instances.get(parsed.agent)
-        
-        if agent is None:
-            logger.warning(f"Agent {parsed.agent} not found, using FallbackAgent")
-            agent = _agent_instances.get("FallbackAgent")
+        for idx, action in enumerate(parsed.actions, 1):
+            logger.debug(f"Action {idx}/{len(parsed.actions)} - Intent: {action.intent}, Agent: {action.agent}")
+            
+            # Route to agent
+            agent_class = route_to_agent(action)
+            
+            if agent_class is None:
+                logger.warning(f"No agent found for action {idx}")
+                result = {
+                    "status": "error",
+                    "message": "Agent not found",
+                    "result": None
+                }
+                action_results.append(result)
+                continue
+            
+            # Get agent instance
+            agent = _agent_instances.get(action.agent)
             
             if agent is None:
-                logger.error("FallbackAgent not available")
-                raise HTTPException(status_code=500, detail="Agent not available")
+                # Fallback to FallbackAgent
+                logger.warning(f"Agent {action.agent} not found, using FallbackAgent")
+                agent = _agent_instances.get("FallbackAgent")
+                
+                if agent is None:
+                    logger.error("FallbackAgent not available")
+                    result = {
+                        "status": "error",
+                        "message": "Agent not available",
+                        "result": None
+                    }
+                    action_results.append(result)
+                    continue
+            
+            logger.info(f"Action {idx}: Routing to agent: {agent.get_agent_name()}")
+            
+            # Execute agent with intent and previous results as context
+            params_with_context = {
+                **action.params,
+                "intent": action.intent,
+                "previous_results": previous_results  # Pass previous results for context
+            }
+            
+            result = await agent.handle(params_with_context)
+            logger.debug(f"Action {idx} result: {result.get('status')} - {result.get('message', '')}")
+            
+            action_results.append(result)
+            previous_results.append({
+                "action": idx,
+                "intent": action.intent,
+                "agent": action.agent,
+                "result": result
+            })
         
-        logger.info(f"Routing to agent: {agent.get_agent_name()}")
+        # Step 3: Generate natural language response combining all results
+        final_response = await summarize_multi_action_results(
+            action_results,
+            parsed,
+            conversation_history
+        )
+        logger.info(f"Request processed successfully with {len(action_results)} action(s)")
         
-        # Step 3: Execute agent
-        params_with_intent = {**parsed.params, "intent": parsed.intent}
-        result = await agent.handle(params_with_intent)
-        logger.debug(f"Agent result: {result.get('status')}")
-        
-        # Step 4: Generate natural language response with conversation history
-        final_response = await summarize_result(result, parsed, conversation_history)
-        logger.info("Request processed successfully")
+        # Determine overall status
+        overall_status = "ok"
+        if all(r.get("status") == "error" for r in action_results):
+            overall_status = "error"
         
         # Add assistant response to session history
-        if request.session_id:
+        if request.session_id and session:
             await session.add_message(
                 "assistant", 
                 final_response,
                 metadata={
-                    "intent": parsed.intent,
-                    "agent": parsed.agent,
-                    "status": result.get("status", "ok")
+                    "action_count": len(parsed.actions),
+                    "actions": [
+                        {
+                            "intent": action.intent,
+                            "agent": action.agent,
+                            "status": result.get("status", "ok")
+                        }
+                        for action, result in zip(parsed.actions, action_results)
+                    ]
                 }
             )
         
         return AssistantResponse(
             response=final_response,
-            intent=parsed.intent,
-            agent=parsed.agent,
-            status=result.get("status", "ok"),
+            action_count=len(parsed.actions),
+            actions=[
+                ActionInfo(
+                    intent=action.intent,
+                    agent=action.agent,
+                    status=result.get("status", "ok")
+                )
+                for action, result in zip(parsed.actions, action_results)
+            ],
+            status=overall_status,
             session_id=request.session_id
         )
         

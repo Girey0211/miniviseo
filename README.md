@@ -1,6 +1,6 @@
 # AI Personal Assistant
 
-LLM 기반 개인 비서 토이 프로젝트
+LLM 기반 개인 비서 토이 프로젝트 - **다중 액션 지원**
 
 ## 빠른 시작
 
@@ -180,14 +180,58 @@ Content-Type: application/json
 }
 ```
 
-**응답 예시**
+**응답 예시 (단일 액션)**
 ```json
 {
   "response": "메모를 작성했습니다.",
-  "intent": "write_note",
-  "agent": "NoteAgent",
+  "action_count": 1,
+  "actions": [
+    {
+      "intent": "write_note",
+      "agent": "NoteAgent",
+      "status": "ok"
+    }
+  ],
   "status": "ok",
   "session_id": "user-123-session"
+}
+```
+
+**다중 액션 요청 예시**
+```bash
+POST /assistant
+Content-Type: application/json
+
+{
+  "text": "안녕, 내일 3시에 밥을 먹을거라 부산역 주변 맛집 찾아서 일정 만들어",
+  "session_id": "user-123"
+}
+```
+
+**다중 액션 응답 예시**
+```json
+{
+  "response": "안녕하세요! 부산역 주변 맛집을 검색했습니다. 1) 부산집 - 돼지국밥 전문점, 2) 해운대식당 - 회 전문점, 3) 밀면골목 - 밀면 전문점. 내일 오후 3시에 '밥약속' 일정을 추가했습니다.",
+  "action_count": 3,
+  "actions": [
+    {
+      "intent": "unknown",
+      "agent": "FallbackAgent",
+      "status": "ok"
+    },
+    {
+      "intent": "web_search",
+      "agent": "WebAgent",
+      "status": "ok"
+    },
+    {
+      "intent": "calendar_add",
+      "agent": "CalendarAgent",
+      "status": "ok"
+    }
+  ],
+  "status": "ok",
+  "session_id": "user-123"
 }
 ```
 
@@ -271,6 +315,7 @@ python src/app.py
 
 ## 지원하는 기능
 
+- **다중 액션 지원** ⭐ NEW: 한 번의 요청에서 여러 작업을 순차적으로 실행
 - **메모**: 메모 작성, 메모 목록 조회 (Notion 통합)
 - **일정**: 일정 조회, 일정 추가 (Notion 통합)
 - **웹 검색**: 검색 결과 자동 수집 및 LLM 요약
@@ -330,19 +375,38 @@ NOTION_NOTES_DATABASE_ID=your_notes_database_id
 
 ## 예시 명령어
 
-### 메모 관리
+### 단일 작업
+
+#### 메모 관리
 - "오늘 한 일 메모해줘: 프로젝트 설정 완료"
 - "회의록 작성해줘: 제목은 팀 미팅, 내용은 Q1 목표 논의"
 - "내 메모 목록 보여줘"
 
-### 일정 관리
+#### 일정 관리
 - "오늘 오전 9시에 회의 추가해줘"
 - "내일 오후 2시에 치과 예약 추가"
 - "이번 주 일정 보여줘"
 
-### 웹 검색
+#### 웹 검색
 - "파이썬 최신 뉴스 검색해줘"
 - "OpenAI API 문서 찾아줘"
+
+### 다중 작업 ⭐ NEW
+
+한 번의 요청으로 여러 작업을 순차적으로 실행할 수 있습니다:
+
+- **"안녕, 내일 3시에 밥을 먹을거라 부산역 주변 맛집 찾아서 일정 만들어"**
+  1. 인사 응답 (FallbackAgent)
+  2. 부산역 주변 맛집 검색 (WebAgent)
+  3. 내일 3시 일정 추가 (CalendarAgent)
+
+- **"파이썬 최신 뉴스 검색하고 메모해줘"**
+  1. 파이썬 뉴스 검색 (WebAgent)
+  2. 검색 결과를 메모로 저장 (NoteAgent)
+
+- **"이번주 일정 보여주고, 내일 오전 10시에 회의 추가해줘"**
+  1. 이번주 일정 조회 (CalendarAgent)
+  2. 내일 오전 10시 회의 추가 (CalendarAgent)
 
 ## 프로젝트 구조
 

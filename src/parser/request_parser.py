@@ -29,13 +29,13 @@ Valid intents: list_files, read_file, write_note, list_notes, calendar_list, cal
     
     async def parse_request(self, text: str) -> ParsedRequest:
         """
-        Parse natural language text into structured ParsedRequest
+        Parse natural language text into structured ParsedRequest with multiple actions
         
         Args:
             text: User input text
             
         Returns:
-            ParsedRequest object with intent, agent, and params
+            ParsedRequest object with list of actions
         """
         try:
             # Format prompt with user input
@@ -49,7 +49,7 @@ Valid intents: list_files, read_file, write_note, list_notes, calendar_list, cal
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.3,
-                max_tokens=500
+                max_tokens=1000
             )
             
             # Extract response content
@@ -60,28 +60,47 @@ Valid intents: list_files, read_file, write_note, list_notes, calendar_list, cal
             
             # Validate and create ParsedRequest
             parsed_request = ParsedRequest(
-                intent=parsed_data.get("intent", "unknown"),
-                agent=parsed_data.get("agent", "FallbackAgent"),
-                params=parsed_data.get("params", {}),
+                actions=parsed_data.get("actions", []),
                 raw_text=text
             )
+            
+            # If no actions, add fallback
+            if not parsed_request.actions:
+                from parser.schemas import AgentAction
+                parsed_request.actions = [
+                    AgentAction(
+                        intent="unknown",
+                        agent="FallbackAgent",
+                        params={"text": text}
+                    )
+                ]
             
             return parsed_request
             
         except json.JSONDecodeError as e:
             # JSON parsing failed - return fallback
+            from parser.schemas import AgentAction
             return ParsedRequest(
-                intent="unknown",
-                agent="FallbackAgent",
-                params={},
+                actions=[
+                    AgentAction(
+                        intent="unknown",
+                        agent="FallbackAgent",
+                        params={"text": text}
+                    )
+                ],
                 raw_text=text
             )
         except Exception as e:
             # Any other error - return fallback
+            from parser.schemas import AgentAction
             return ParsedRequest(
-                intent="unknown",
-                agent="FallbackAgent",
-                params={"error": str(e)},
+                actions=[
+                    AgentAction(
+                        intent="unknown",
+                        agent="FallbackAgent",
+                        params={"text": text, "error": str(e)}
+                    )
+                ],
                 raw_text=text
             )
 

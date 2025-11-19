@@ -282,9 +282,85 @@ Intent: {parsed_request.intent}
         return f"작업이 완료되었습니다. 결과: {result.get('result')}"
 
 
+async def summarize_multi_action_results(
+    action_results: list,
+    parsed_request,
+    conversation_history: list = None
+) -> str:
+    """
+    Generate natural language response from multiple action results using LLM
+    
+    Args:
+        action_results: List of result dictionaries from agents
+        parsed_request: Original parsed request with actions
+        conversation_history: Previous conversation messages for context
+        
+    Returns:
+        Natural language response string
+    """
+    # Check if any action failed
+    errors = [r for r in action_results if r.get("status") == "error"]
+    if errors and len(errors) == len(action_results):
+        return f"죄송합니다. 모든 작업이 실패했습니다: {errors[0].get('message', '알 수 없는 오류')}"
+    
+    # Build detailed results for LLM
+    action_details = []
+    for idx, (action, result) in enumerate(zip(parsed_request.actions, action_results), 1):
+        action_details.append(f"""
+작업 {idx}:
+- Intent: {action.intent}
+- Agent: {action.agent}
+- 상태: {result.get('status')}
+- 결과: {result.get('result')}
+- 메시지: {result.get('message', '')}
+""")
+    
+    # Create prompt for LLM to generate natural response
+    prompt = f"""사용자의 요청: "{parsed_request.raw_text}"
+
+실행된 작업들:
+{''.join(action_details)}
+
+위 실행 결과들을 바탕으로 사용자에게 자연스러운 한국어로 통합된 응답을 생성해주세요.
+- 모든 작업의 결과를 자연스럽게 연결하여 설명
+- 간결하고 명확하게 작성
+- 결과의 핵심 정보를 포함
+- 친근한 톤 사용
+- 작업이 여러 개인 경우, 순서대로 설명"""
+
+    try:
+        # Build messages with conversation history
+        messages = [
+            {"role": "system", "content": "당신은 친절한 AI 개인 비서입니다. 사용자에게 간결하고 명확한 한국어로 응답합니다."}
+        ]
+        
+        # Add conversation history if available
+        if conversation_history:
+            messages.extend(conversation_history)
+        
+        # Add current prompt
+        messages.append({"role": "user", "content": prompt})
+        
+        response = await _llm_client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=messages,
+            temperature=0.7,
+            max_tokens=1000
+        )
+        
+        return response.choices[0].message.content.strip()
+        
+    except Exception as e:
+        # Fallback to simple response if LLM fails
+        logger.error(f"Error in summarize_multi_action_results: {str(e)}")
+        success_count = len([r for r in action_results if r.get("status") == "ok"])
+        return f"{success_count}개의 작업이 완료되었습니다."
+
+
 async def run_once(text: str) -> str:
     """
     Process a single user request with conversation history
+    Supports multiple actions in a single request
     
     Args:
         text: User input text
@@ -301,47 +377,80 @@ async def run_once(text: str) -> str:
         # Get conversation context for LLM
         conversation_history = await _current_session.get_context_for_llm(limit=10)
         
-        # Step 1: Parse request
+        # Step 1: Parse request (may contain multiple actions)
         parsed = await parse_request(text)
-        logger.debug(f"Parsed request - Intent: {parsed.intent}, Agent: {parsed.agent}, Params: {parsed.params}")
+        logger.debug(f"Parsed request with {len(parsed.actions)} action(s)")
         
-        # Step 2: Route to agent
-        agent_class = route_to_agent(parsed)
+        # Step 2: Execute each action sequentially
+        action_results = []
+        previous_results = []  # Store results for context in later actions
         
-        if agent_class is None:
-            logger.warning("No agent found for request")
-            response = "죄송합니다. 요청을 처리할 수 없습니다."
-            await _current_session.add_message("assistant", response)
-            return response
+        for idx, action in enumerate(parsed.actions, 1):
+            logger.debug(f"Action {idx}/{len(parsed.actions)} - Intent: {action.intent}, Agent: {action.agent}, Params: {action.params}")
+            
+            # Route to agent
+            agent_class = route_to_agent(action)
+            
+            if agent_class is None:
+                logger.warning(f"No agent found for action {idx}")
+                result = {
+                    "status": "error",
+                    "message": "Agent not found",
+                    "result": None
+                }
+                action_results.append(result)
+                continue
+            
+            # Get agent instance
+            agent = _agent_instances.get(action.agent)
+            
+            if agent is None:
+                # Fallback to FallbackAgent
+                logger.warning(f"Agent {action.agent} not found, using FallbackAgent")
+                agent = _agent_instances.get("FallbackAgent")
+            
+            logger.info(f"Action {idx}: Routing to agent: {agent.get_agent_name()}")
+            
+            # Execute agent with intent and previous results as context
+            params_with_context = {
+                **action.params,
+                "intent": action.intent,
+                "previous_results": previous_results  # Pass previous results for context
+            }
+            
+            result = await agent.handle(params_with_context)
+            logger.debug(f"Action {idx} result: {result.get('status')} - {result.get('message', '')}")
+            
+            action_results.append(result)
+            previous_results.append({
+                "action": idx,
+                "intent": action.intent,
+                "agent": action.agent,
+                "result": result
+            })
         
-        # Get agent instance
-        agent = _agent_instances.get(parsed.agent)
-        
-        if agent is None:
-            # Fallback to FallbackAgent
-            logger.warning(f"Agent {parsed.agent} not found, using FallbackAgent")
-            agent = _agent_instances.get("FallbackAgent")
-        
-        logger.info(f"Routing to agent: {agent.get_agent_name()}")
-        
-        # Step 3: Execute agent
-        # Add intent to params for agent to use
-        params_with_intent = {**parsed.params, "intent": parsed.intent}
-        result = await agent.handle(params_with_intent)
-        logger.debug(f"Agent result: {result.get('status')} - {result.get('message', '')}")
-        
-        # Step 4: Generate natural language response with conversation history
-        final_response = await summarize_result(result, parsed, conversation_history)
-        logger.info("Request processed successfully")
+        # Step 3: Generate natural language response combining all results
+        final_response = await summarize_multi_action_results(
+            action_results,
+            parsed,
+            conversation_history
+        )
+        logger.info(f"Request processed successfully with {len(action_results)} action(s)")
         
         # Add assistant response to session
         await _current_session.add_message(
             "assistant",
             final_response,
             metadata={
-                "intent": parsed.intent,
-                "agent": parsed.agent,
-                "status": result.get("status", "ok")
+                "action_count": len(parsed.actions),
+                "actions": [
+                    {
+                        "intent": action.intent,
+                        "agent": action.agent,
+                        "status": result.get("status", "ok")
+                    }
+                    for action, result in zip(parsed.actions, action_results)
+                ]
             }
         )
         
@@ -382,106 +491,106 @@ async def main_loop():
     
     try:
         while True:
-        try:
-            # Get user input
-            user_input = Prompt.ask("\n[bold green]You[/bold green]")
-            
-            if not user_input.strip():
-                continue
-            
-            # Handle commands
-            if user_input.strip() == "/exit":
-                logger.info("User requested exit")
-                console.print("[yellow]종료합니다.[/yellow]")
-                break
-            elif user_input.strip() == "/help":
-                message_count = await _current_session.get_message_count()
-                session_info = f"세션: {_current_session.session_id} ({message_count}개 메시지)"
+            try:
+                # Get user input
+                user_input = Prompt.ask("\n[bold green]You[/bold green]")
                 
-                console.print(Panel(
-                    f"[bold cyan]세션 정보[/bold cyan]\n"
-                    f"{session_info}\n\n"
-                    "[bold cyan]사용 가능한 명령[/bold cyan]\n\n"
-                    "[bold]자연어 요청:[/bold]\n"
-                    "• 메모: '오늘 한 일 메모해줘: 프로젝트 완료'\n"
-                    "• 일정: '오늘 오전 9시에 회의 추가해줘'\n"
-                    "• 웹 검색: '파이썬 최신 뉴스 검색해줘'\n\n"
-                    "[bold]세션 관리:[/bold]\n"
-                    "• [bold]/session[/bold] - 세션 목록 보기\n"
-                    "• [bold]/session-select <번호|ID>[/bold] - 세션 전환\n"
-                    "• [bold]/session-delete <번호|ID>[/bold] - 세션 삭제\n\n"
-                    "[bold]기타 명령:[/bold]\n"
-                    "• [bold]/help[/bold] - 이 도움말 보기\n"
-                    "• [bold]/history[/bold] - 현재 세션의 대화 히스토리 보기\n"
-                    "• [bold]/clear[/bold] - 현재 세션의 대화 히스토리 초기화\n"
-                    "• [bold]/debug[/bold] - 디버그 모드 토글\n"
-                    "• [bold]/exit[/bold] - 종료",
-                    title="AI Personal Assistant - 도움말",
-                    border_style="cyan"
-                ))
-                continue
-            elif user_input.strip() == "/session":
-                await handle_session_list()
-                continue
-            elif user_input.strip().startswith("/session-select"):
-                parts = user_input.strip().split()
-                if len(parts) == 2:
-                    await handle_session_select(parts[1])
-                else:
-                    console.print("[red]사용법: /session-select <번호|세션ID>[/red]")
-                    console.print("[dim]예: /session-select 2 또는 /session-select cli-abc123[/dim]")
-                continue
-            elif user_input.strip().startswith("/session-delete"):
-                parts = user_input.strip().split()
-                if len(parts) == 2:
-                    await handle_session_delete(parts[1])
-                else:
-                    console.print("[red]사용법: /session-delete <번호|세션ID>[/red]")
-                    console.print("[dim]예: /session-delete 3 또는 /session-delete cli-abc123[/dim]")
-                continue
-            elif user_input.strip() == "/clear":
-                await _current_session.clear()
-                console.print("[yellow]대화 히스토리가 초기화되었습니다.[/yellow]")
-                logger.info("Conversation history cleared")
-                continue
-            elif user_input.strip() == "/history":
-                messages = await _current_session.get_messages(page=0, page_size=20)
-                if not messages:
-                    console.print("[yellow]대화 히스토리가 없습니다.[/yellow]")
-                else:
+                if not user_input.strip():
+                    continue
+                
+                # Handle commands
+                if user_input.strip() == "/exit":
+                    logger.info("User requested exit")
+                    console.print("[yellow]종료합니다.[/yellow]")
+                    break
+                elif user_input.strip() == "/help":
+                    message_count = await _current_session.get_message_count()
+                    session_info = f"세션: {_current_session.session_id} ({message_count}개 메시지)"
+                    
                     console.print(Panel(
-                        "\n".join([
-                            f"[{'green' if msg['role'] == 'user' else 'blue'}]{msg['role']}[/]: {msg['content'][:100]}{'...' if len(msg['content']) > 100 else ''}"
-                            for msg in messages[-10:]  # Show last 10 messages
-                        ]),
-                        title=f"대화 히스토리 (최근 10개, 전체 {len(messages)}개)",
-                        border_style="blue"
+                        f"[bold cyan]세션 정보[/bold cyan]\n"
+                        f"{session_info}\n\n"
+                        "[bold cyan]사용 가능한 명령[/bold cyan]\n\n"
+                        "[bold]자연어 요청:[/bold]\n"
+                        "• 메모: '오늘 한 일 메모해줘: 프로젝트 완료'\n"
+                        "• 일정: '오늘 오전 9시에 회의 추가해줘'\n"
+                        "• 웹 검색: '파이썬 최신 뉴스 검색해줘'\n\n"
+                        "[bold]세션 관리:[/bold]\n"
+                        "• [bold]/session[/bold] - 세션 목록 보기\n"
+                        "• [bold]/session-select <번호|ID>[/bold] - 세션 전환\n"
+                        "• [bold]/session-delete <번호|ID>[/bold] - 세션 삭제\n\n"
+                        "[bold]기타 명령:[/bold]\n"
+                        "• [bold]/help[/bold] - 이 도움말 보기\n"
+                        "• [bold]/history[/bold] - 현재 세션의 대화 히스토리 보기\n"
+                        "• [bold]/clear[/bold] - 현재 세션의 대화 히스토리 초기화\n"
+                        "• [bold]/debug[/bold] - 디버그 모드 토글\n"
+                        "• [bold]/exit[/bold] - 종료",
+                        title="AI Personal Assistant - 도움말",
+                        border_style="cyan"
                     ))
-                continue
-            elif user_input.strip() == "/debug":
-                debug_mode = not debug_mode
-                status = "활성화" if debug_mode else "비활성화"
+                    continue
+                elif user_input.strip() == "/session":
+                    await handle_session_list()
+                    continue
+                elif user_input.strip().startswith("/session-select"):
+                    parts = user_input.strip().split()
+                    if len(parts) == 2:
+                        await handle_session_select(parts[1])
+                    else:
+                        console.print("[red]사용법: /session-select <번호|세션ID>[/red]")
+                        console.print("[dim]예: /session-select 2 또는 /session-select cli-abc123[/dim]")
+                    continue
+                elif user_input.strip().startswith("/session-delete"):
+                    parts = user_input.strip().split()
+                    if len(parts) == 2:
+                        await handle_session_delete(parts[1])
+                    else:
+                        console.print("[red]사용법: /session-delete <번호|세션ID>[/red]")
+                        console.print("[dim]예: /session-delete 3 또는 /session-delete cli-abc123[/dim]")
+                    continue
+                elif user_input.strip() == "/clear":
+                    await _current_session.clear()
+                    console.print("[yellow]대화 히스토리가 초기화되었습니다.[/yellow]")
+                    logger.info("Conversation history cleared")
+                    continue
+                elif user_input.strip() == "/history":
+                    messages = await _current_session.get_messages(page=0, page_size=20)
+                    if not messages:
+                        console.print("[yellow]대화 히스토리가 없습니다.[/yellow]")
+                    else:
+                        console.print(Panel(
+                            "\n".join([
+                                f"[{'green' if msg['role'] == 'user' else 'blue'}]{msg['role']}[/]: {msg['content'][:100]}{'...' if len(msg['content']) > 100 else ''}"
+                                for msg in messages[-10:]  # Show last 10 messages
+                            ]),
+                            title=f"대화 히스토리 (최근 10개, 전체 {len(messages)}개)",
+                            border_style="blue"
+                        ))
+                    continue
+                elif user_input.strip() == "/debug":
+                    debug_mode = not debug_mode
+                    status = "활성화" if debug_mode else "비활성화"
+                    
+                    # Change console log level based on debug mode
+                    if debug_mode:
+                        set_console_level("INFO")
+                    else:
+                        set_console_level("WARNING")
+                    
+                    console.print(f"[yellow]디버그 모드 {status}[/yellow]")
+                    logger.info(f"Debug mode toggled: {debug_mode}")
+                    continue
+            
+                # Process request with spinner
+                with console.status("[cyan]처리 중...", spinner="line") as status:
+                    response = await run_once(user_input)
                 
-                # Change console log level based on debug mode
+                console.print(f"[bold blue]Assistant[/bold blue]: {response}")
+                
+                # Show debug info if enabled
                 if debug_mode:
-                    set_console_level("INFO")
-                else:
-                    set_console_level("WARNING")
+                    console.print(f"[dim]로그 파일: {LOG_FILE}[/dim]")
                 
-                console.print(f"[yellow]디버그 모드 {status}[/yellow]")
-                logger.info(f"Debug mode toggled: {debug_mode}")
-                continue
-            
-            # Process request with spinner
-            with console.status("[cyan]처리 중...", spinner="line") as status:
-                response = await run_once(user_input)
-            
-            console.print(f"[bold blue]Assistant[/bold blue]: {response}")
-            
-            # Show debug info if enabled
-            if debug_mode:
-                console.print(f"[dim]로그 파일: {LOG_FILE}[/dim]")
-            
             except KeyboardInterrupt:
                 logger.info("User interrupted with Ctrl+C")
                 console.print("\n[yellow]종료합니다.[/yellow]")

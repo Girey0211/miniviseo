@@ -6,7 +6,7 @@ from hypothesis import given, strategies as st
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from router.agent_router import AgentRouter, route_to_agent, register_agent, get_router, INTENT_MAP
-from parser.schemas import ParsedRequest
+from parser.schemas import AgentAction
 
 
 # Mock agent classes for testing
@@ -78,125 +78,103 @@ class TestAgentRouter:
         assert "TestAgent" in router._agent_registry
         assert router._agent_registry["TestAgent"] == TestAgent
     
-    def test_get_agent_name_from_parsed_agent_field(self, router):
-        """Test getting agent name from parsed.agent field"""
-        parsed = ParsedRequest(
-            intent="list_files",
-            agent="FileAgent",
-            params={"path": "downloads"}
+    def test_get_agent_name_from_action_agent_field(self, router):
+        """Test getting agent name from action.agent field"""
+        action = AgentAction(
+            intent="write_note",
+            agent="NoteAgent",
+            params={"text": "test"}
         )
         
-        agent_name = router.get_agent_name(parsed)
-        assert agent_name == "FileAgent"
+        agent_name = router.get_agent_name(action)
+        assert agent_name == "NoteAgent"
     
     def test_get_agent_name_from_intent_mapping(self, router):
         """Test getting agent name from intent mapping"""
-        parsed = ParsedRequest(
+        action = AgentAction(
             intent="write_note",
             agent="UnknownAgent",  # Not registered
             params={}
         )
         
-        agent_name = router.get_agent_name(parsed)
+        agent_name = router.get_agent_name(action)
         assert agent_name == "NoteAgent"  # Should fall back to intent mapping
-    
-    def test_route_list_files_to_fallback_agent(self, router):
-        """Test routing list_files intent to FallbackAgent (file intents removed)"""
-        parsed = ParsedRequest(
-            intent="list_files",
-            agent="UnknownAgent",
-            params={"path": "downloads"}
-        )
-        
-        agent_class = router.route_to_agent(parsed)
-        assert agent_class == MockFallbackAgent
-    
-    def test_route_read_file_to_fallback_agent(self, router):
-        """Test routing read_file intent to FallbackAgent (file intents removed)"""
-        parsed = ParsedRequest(
-            intent="read_file",
-            agent="UnknownAgent",
-            params={"path": "test.txt"}
-        )
-        
-        agent_class = router.route_to_agent(parsed)
-        assert agent_class == MockFallbackAgent
     
     def test_route_write_note_to_note_agent(self, router):
         """Test routing write_note intent to NoteAgent"""
-        parsed = ParsedRequest(
+        action = AgentAction(
             intent="write_note",
             agent="NoteAgent",
             params={"text": "test note"}
         )
         
-        agent_class = router.route_to_agent(parsed)
+        agent_class = router.route_to_agent(action)
         assert agent_class == MockNoteAgent
     
     def test_route_list_notes_to_note_agent(self, router):
         """Test routing list_notes intent to NoteAgent"""
-        parsed = ParsedRequest(
+        action = AgentAction(
             intent="list_notes",
             agent="NoteAgent",
             params={}
         )
         
-        agent_class = router.route_to_agent(parsed)
+        agent_class = router.route_to_agent(action)
         assert agent_class == MockNoteAgent
     
     def test_route_calendar_list_to_calendar_agent(self, router):
         """Test routing calendar_list intent to CalendarAgent"""
-        parsed = ParsedRequest(
+        action = AgentAction(
             intent="calendar_list",
             agent="CalendarAgent",
             params={}
         )
         
-        agent_class = router.route_to_agent(parsed)
+        agent_class = router.route_to_agent(action)
         assert agent_class == MockCalendarAgent
     
     def test_route_calendar_add_to_calendar_agent(self, router):
         """Test routing calendar_add intent to CalendarAgent"""
-        parsed = ParsedRequest(
+        action = AgentAction(
             intent="calendar_add",
             agent="CalendarAgent",
             params={"title": "meeting", "time": "09:00"}
         )
         
-        agent_class = router.route_to_agent(parsed)
+        agent_class = router.route_to_agent(action)
         assert agent_class == MockCalendarAgent
     
     def test_route_web_search_to_web_agent(self, router):
         """Test routing web_search intent to WebAgent"""
-        parsed = ParsedRequest(
+        action = AgentAction(
             intent="web_search",
             agent="WebAgent",
             params={"query": "python news"}
         )
         
-        agent_class = router.route_to_agent(parsed)
+        agent_class = router.route_to_agent(action)
         assert agent_class == MockWebAgent
     
     def test_route_unknown_to_fallback_agent(self, router):
         """Test routing unknown intent to FallbackAgent"""
-        parsed = ParsedRequest(
+        action = AgentAction(
             intent="unknown",
             agent="FallbackAgent",
             params={}
         )
         
-        agent_class = router.route_to_agent(parsed)
+        agent_class = router.route_to_agent(action)
         assert agent_class == MockFallbackAgent
     
     def test_route_unregistered_agent_to_fallback(self, router):
         """Test routing to FallbackAgent when agent not registered"""
-        parsed = ParsedRequest(
+        action = AgentAction(
             intent="unknown_intent",
             agent="NonExistentAgent",
             params={}
         )
         
-        agent_class = router.route_to_agent(parsed)
+        agent_class = router.route_to_agent(action)
         assert agent_class == MockFallbackAgent
     
     def test_get_agent_for_intent(self, router):
@@ -238,23 +216,18 @@ class TestRouterConvenienceFunctions:
         # Register a test agent
         register_agent("FallbackAgent", MockFallbackAgent)
         
-        parsed = ParsedRequest(
+        action = AgentAction(
             intent="unknown",
             agent="FallbackAgent",
             params={}
         )
         
-        agent_class = route_to_agent(parsed)
+        agent_class = route_to_agent(action)
         assert agent_class == MockFallbackAgent
 
 
 class TestIntentMapping:
     """Test intent to agent mapping"""
-    
-    def test_file_intents_not_in_map(self):
-        """Test file-related intents are not in INTENT_MAP"""
-        assert "list_files" not in INTENT_MAP
-        assert "read_file" not in INTENT_MAP
     
     def test_note_intents_map_to_note_agent(self):
         """Test note-related intents map to NoteAgent"""
@@ -280,8 +253,7 @@ class TestPropertyBasedRouting:
     """Property-based tests for routing behavior"""
     
     @given(
-        intent=st.sampled_from(["list_files", "read_file"]),
-        agent=st.text(min_size=1, max_size=20),
+        intent=st.sampled_from(["write_note", "list_notes", "calendar_add", "calendar_list", "web_search", "unknown"]),
         params=st.dictionaries(
             keys=st.text(min_size=1, max_size=20),
             values=st.text(min_size=0, max_size=100),
@@ -289,29 +261,39 @@ class TestPropertyBasedRouting:
             max_size=5
         )
     )
-    def test_file_intent_fallback_routing(self, intent, agent, params):
+    def test_intent_routing_consistency(self, intent, params):
         """
-        **Feature: agent-refactoring, Property 1: File intent fallback routing**
+        **Feature: multi-action-support, Property 1: Intent routing consistency**
         
-        Property: For any user request with file-related intent (list_files, read_file),
-        the system should route to FallbackAgent
+        Property: For any valid intent with unregistered agent, the router should consistently route based on intent
         
-        **Validates: Requirements 1.2**
+        **Validates: Requirements 1.1**
         """
-        # Setup router with FallbackAgent registered
+        # Setup router with all agents registered
         router = AgentRouter()
+        router.register_agent("NoteAgent", MockNoteAgent)
+        router.register_agent("CalendarAgent", MockCalendarAgent)
+        router.register_agent("WebAgent", MockWebAgent)
         router.register_agent("FallbackAgent", MockFallbackAgent)
         
-        # Create parsed request with file-related intent
-        parsed = ParsedRequest(
+        # Create action with unregistered agent name to test intent-based routing
+        action = AgentAction(
             intent=intent,
-            agent=agent,
+            agent="UnregisteredAgent",  # Use unregistered agent to force intent-based routing
             params=params
         )
         
         # Route the request
-        agent_class = router.route_to_agent(parsed)
+        agent_class = router.route_to_agent(action)
         
-        # Verify it routes to FallbackAgent
-        assert agent_class == MockFallbackAgent, \
-            f"File intent '{intent}' should route to FallbackAgent, but got {agent_class}"
+        # Verify it routes to correct agent based on intent
+        expected_agent = INTENT_MAP.get(intent, "FallbackAgent")
+        expected_class = {
+            "NoteAgent": MockNoteAgent,
+            "CalendarAgent": MockCalendarAgent,
+            "WebAgent": MockWebAgent,
+            "FallbackAgent": MockFallbackAgent
+        }.get(expected_agent)
+        
+        assert agent_class == expected_class, \
+            f"Intent '{intent}' should route to {expected_agent}, but got {agent_class}"

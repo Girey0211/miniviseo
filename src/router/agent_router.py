@@ -7,7 +7,7 @@ from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from parser.schemas import ParsedRequest
+from parser.schemas import AgentAction
 
 
 # Intent to Agent mapping
@@ -33,41 +33,41 @@ class AgentRouter:
         Register an agent class
         
         Args:
-            agent_name: Name of the agent (e.g., "FileAgent")
+            agent_name: Name of the agent (e.g., "NoteAgent")
             agent_class: Agent class to register
         """
         self._agent_registry[agent_name] = agent_class
     
-    def get_agent_name(self, parsed: ParsedRequest) -> str:
+    def get_agent_name(self, action: AgentAction) -> str:
         """
-        Get agent name from parsed request
+        Get agent name from action
         
         Args:
-            parsed: ParsedRequest object
+            action: AgentAction object
             
         Returns:
             Agent name string
         """
-        # First try to use the agent field from parsed request
-        if parsed.agent and parsed.agent in self._agent_registry:
-            return parsed.agent
+        # First try to use the agent field from action
+        if action.agent and action.agent in self._agent_registry:
+            return action.agent
         
         # Fall back to intent mapping
-        agent_name = self.intent_map.get(parsed.intent, "FallbackAgent")
+        agent_name = self.intent_map.get(action.intent, "FallbackAgent")
         
         return agent_name
     
-    def route_to_agent(self, parsed: ParsedRequest):
+    def route_to_agent(self, action: AgentAction):
         """
-        Route parsed request to appropriate agent instance
+        Route action to appropriate agent instance
         
         Args:
-            parsed: ParsedRequest object
+            action: AgentAction object
             
         Returns:
             Agent instance or None if not found
         """
-        agent_name = self.get_agent_name(parsed)
+        agent_name = self.get_agent_name(action)
         
         # Get agent class from registry
         agent_class = self._agent_registry.get(agent_name)
@@ -104,17 +104,17 @@ def get_router() -> AgentRouter:
     return _router
 
 
-def route_to_agent(parsed: ParsedRequest):
+def route_to_agent(action: AgentAction):
     """
-    Convenience function to route parsed request to agent
+    Convenience function to route action to agent
     
     Args:
-        parsed: ParsedRequest object
+        action: AgentAction object
         
     Returns:
         Agent class
     """
-    return _router.route_to_agent(parsed)
+    return _router.route_to_agent(action)
 
 
 def register_agent(agent_name: str, agent_class):
