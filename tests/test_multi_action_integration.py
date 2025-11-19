@@ -351,3 +351,66 @@ class TestMultiActionContextPassing:
             assert "참고 링크" in note_data["text"]
             # Make sure it's not just using the text param
             assert "새로운 모델" in note_data["text"] or "주가가 상승" in note_data["text"]
+
+    @pytest.mark.asyncio
+    async def test_web_search_to_calendar_replaces_description(self, mock_mcp_client, mock_llm_client):
+        """Test that previous_results REPLACE calendar description, not append"""
+        # Setup web agent
+        web_agent = WebAgent(mcp_client=mock_mcp_client)
+        
+        # Mock search and fetch operations
+        mock_mcp_client.call.side_effect = [
+            {"status": "ok", "result": [{"title": "강남 맛집", "url": "http://example.com/1"}]},
+            {"status": "ok", "result": {"text": "강남역 근처 최고의 맛집 리스트"}}
+        ]
+        
+        # Mock LLM summarization
+        search_summary = "강남역 맛집 추천:\n1. 강남역 근처 최고의 맛집 리스트"
+        with patch.object(web_agent, '_summarize_with_llm', return_value=search_summary):
+            web_params = {"intent": "web_search", "query": "강남 맛집"}
+            web_result = await web_agent.handle(web_params)
+            assert web_result["status"] == "ok"
+        
+        # Setup calendar agent with fresh mock
+        calendar_mock_mcp = MagicMock()
+        calendar_mock_mcp.call = AsyncMock()
+        calendar_agent = CalendarAgent(mcp_client=calendar_mock_mcp, llm_client=mock_llm_client)
+        
+        # Mock event data extraction
+        with patch.object(calendar_agent, '_extract_event_data') as mock_extract:
+            mock_extract.return_value = {
+                "title": "저녁약속",
+                "date": "2025-01-02",
+                "time": "19:00",
+                "description": "내일 7시 저녁약속"  # Original description from text
+            }
+            
+            # Mock calendar event creation
+            calendar_result = {"status": "ok", "result": "Event created", "message": "Event added to calendar"}
+            calendar_mock_mcp.call.return_value = calendar_result
+            
+            # Execute calendar add with BOTH text param AND previous results
+            calendar_params = {
+                "intent": "calendar_add",
+                "text": "내일 7시 저녁약속",  # Original text
+                "previous_results": [
+                    {"action": 1, "intent": "web_search", "agent": "WebAgent", "result": web_result}
+                ]
+            }
+            
+            result = await calendar_agent.handle(calendar_params)
+            
+            assert result["status"] == "ok"
+            # Verify that the calendar event description is REPLACED with search results
+            call_args = calendar_mock_mcp.call.call_args
+            assert call_args[0][0] == "notion_calendar"
+            assert call_args[0][1] == "add_event"
+            event_data = call_args[0][2]
+            
+            # Description should contain search summary (with sources), NOT the original text
+            assert search_summary in event_data["description"]
+            assert "참고 링크" in event_data["description"]
+            # Make sure original description is NOT in there
+            assert "내일 7시 저녁약속" not in event_data["description"]
+            # Make sure search result IS in there
+            assert "강남역 맛집" in event_data["description"]

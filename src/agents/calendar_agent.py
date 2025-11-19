@@ -245,12 +245,11 @@ Rules:
                     }
                 elif raw_text:
                     event_data = await self._extract_event_data(raw_text)
-                    # Append additional info from previous results to description
+                    # If previous_results exist, REPLACE description with additional_info (not append)
+                    # This ensures web search results are used instead of original text
                     if additional_info:
-                        if event_data.get("description"):
-                            event_data["description"] = f"{event_data['description']}\n\n{additional_info}"
-                        else:
-                            event_data["description"] = additional_info
+                        event_data["description"] = additional_info
+                    # If no previous_results, keep the extracted description as is
                 else:
                     return self._create_error_response("Event information is required")
                 
