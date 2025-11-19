@@ -14,7 +14,8 @@ class SessionRepository(ABC):
         self, 
         session_id: str, 
         created_at: datetime, 
-        last_accessed: datetime
+        last_accessed: datetime,
+        expires_at: datetime
     ) -> bool:
         """Save or update session metadata"""
         pass

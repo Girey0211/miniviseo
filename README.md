@@ -216,8 +216,9 @@ python src/app.py
 - **웹 검색**: 검색 결과 자동 수집 및 LLM 요약
 - **CLI 모드**: 대화형 인터페이스
 - **API 서버 모드**: HTTP REST API 제공
-- **세션 기반 대화**: 클라이언트별 대화 히스토리 관리 (60분 유지)
+- **세션 기반 대화**: 클라이언트별 대화 히스토리 관리
 - **영구 저장소**: SQLite 기반 세션 및 메시지 저장 (Repository 패턴)
+- **자동 만료**: 세션 사용 시마다 7일 연장, 미사용 시 자동 삭제
 
 ## Notion 통합 (필수)
 
@@ -320,6 +321,20 @@ ai-assistant/
 └─ .env                         # 환경 변수
 ```
 
+## 세션 관리
+
+세션은 다음과 같이 관리됩니다:
+
+- **만료 기한**: 세션 생성 시 7일 후 만료
+- **자동 갱신**: 세션 사용 시마다 만료 기한이 7일 연장
+- **자동 정리**: 만료된 세션은 백그라운드 작업으로 자동 삭제 (10분마다)
+- **영구 저장**: SQLite에 저장되어 서버 재시작 후에도 유지
+
+예시:
+- 세션 생성: 2025-01-01 → 만료: 2025-01-08
+- 2025-01-05에 사용 → 만료: 2025-01-12 (7일 연장)
+- 2025-01-12까지 미사용 → 자동 삭제
+
 ## 개발 현황
 
 - ✅ Phase 1: Request Parser (자연어 → 구조화된 요청)
@@ -329,8 +344,9 @@ ai-assistant/
 - ✅ Phase 3: E2E Integration (완전한 파이프라인)
 - ✅ Phase 3.5: CLI (대화형 인터페이스)
 - ✅ Phase 4: Logging & Error Handling (loguru 기반)
-- ✅ Phase 5: Testing & Validation (112개 테스트 통과)
+- ✅ Phase 5: Testing & Validation (178개 테스트 통과)
 - ✅ Phase 6: Documentation & Deployment
+- ✅ Phase 7: Session Management (SQLite 영구 저장소 + 자동 만료)
 
 ## 테스트 현황
 

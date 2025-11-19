@@ -22,9 +22,10 @@ class TestSQLiteRepository:
         session_id = "test-session"
         created_at = datetime.now()
         last_accessed = datetime.now()
+        expires_at = datetime.now() + timedelta(days=7)
         
         # Save session
-        result = await repo.save_session(session_id, created_at, last_accessed)
+        result = await repo.save_session(session_id, created_at, last_accessed, expires_at)
         assert result is True
         
         # Get session
@@ -33,6 +34,7 @@ class TestSQLiteRepository:
         assert session["session_id"] == session_id
         assert isinstance(session["created_at"], datetime)
         assert isinstance(session["last_accessed"], datetime)
+        assert isinstance(session["expires_at"], datetime)
     
     @pytest.mark.asyncio
     async def test_get_nonexistent_session(self):
@@ -48,7 +50,9 @@ class TestSQLiteRepository:
         repo = SQLiteSessionRepository(db_path=":memory:")
         
         session_id = "test-session"
-        await repo.save_session(session_id, datetime.now(), datetime.now())
+        now = datetime.now()
+        expires_at = now + timedelta(days=7)
+        await repo.save_session(session_id, now, now, expires_at)
         
         # Delete session
         deleted = await repo.delete_session(session_id)
@@ -68,7 +72,9 @@ class TestSQLiteRepository:
         repo = SQLiteSessionRepository(db_path=":memory:")
         
         session_id = "test-session"
-        await repo.save_session(session_id, datetime.now(), datetime.now())
+        now = datetime.now()
+        expires_at = now + timedelta(days=7)
+        await repo.save_session(session_id, now, now, expires_at)
         
         # Save messages
         await repo.save_message(
@@ -100,7 +106,9 @@ class TestSQLiteRepository:
         repo = SQLiteSessionRepository(db_path=":memory:")
         
         session_id = "test-session"
-        await repo.save_session(session_id, datetime.now(), datetime.now())
+        now = datetime.now()
+        expires_at = now + timedelta(days=7)
+        await repo.save_session(session_id, now, now, expires_at)
         
         # Save 10 messages
         for i in range(10):
@@ -123,7 +131,9 @@ class TestSQLiteRepository:
         repo = SQLiteSessionRepository(db_path=":memory:")
         
         session_id = "test-session"
-        await repo.save_session(session_id, datetime.now(), datetime.now())
+        now = datetime.now()
+        expires_at = now + timedelta(days=7)
+        await repo.save_session(session_id, now, now, expires_at)
         
         await repo.save_message(session_id, "user", "Hello", datetime.now())
         await repo.save_message(session_id, "assistant", "Hi", datetime.now())
@@ -142,7 +152,9 @@ class TestSQLiteRepository:
         repo = SQLiteSessionRepository(db_path=":memory:")
         
         session_id = "test-session"
-        await repo.save_session(session_id, datetime.now(), datetime.now())
+        now = datetime.now()
+        expires_at = now + timedelta(days=7)
+        await repo.save_session(session_id, now, now, expires_at)
         
         await repo.save_message(session_id, "user", "Hello", datetime.now())
         await repo.save_message(session_id, "assistant", "Hi", datetime.now())
@@ -156,19 +168,21 @@ class TestSQLiteRepository:
     
     @pytest.mark.asyncio
     async def test_cleanup_expired_sessions(self):
-        """Test cleaning up expired sessions"""
+        """Test cleaning up expired sessions based on expires_at"""
         repo = SQLiteSessionRepository(db_path=":memory:")
         
-        # Create sessions with different access times
+        # Create sessions with different expiry times
         now = datetime.now()
         
-        await repo.save_session("session-1", now, now - timedelta(hours=2))
-        await repo.save_session("session-2", now, now - timedelta(minutes=30))
-        await repo.save_session("session-3", now, now)
+        # session-1: expired 2 hours ago
+        await repo.save_session("session-1", now, now, now - timedelta(hours=2))
+        # session-2: expires in 6 days
+        await repo.save_session("session-2", now, now, now + timedelta(days=6))
+        # session-3: expires in 7 days
+        await repo.save_session("session-3", now, now, now + timedelta(days=7))
         
-        # Cleanup sessions older than 1 hour
-        expiry_time = now - timedelta(hours=1)
-        deleted_count = await repo.cleanup_expired_sessions(expiry_time)
+        # Cleanup sessions that have expired (expires_at < now)
+        deleted_count = await repo.cleanup_expired_sessions(now)
         
         assert deleted_count == 1
         
@@ -177,9 +191,9 @@ class TestSQLiteRepository:
         session2 = await repo.get_session("session-2")
         session3 = await repo.get_session("session-3")
         
-        assert session1 is None
-        assert session2 is not None
-        assert session3 is not None
+        assert session1 is None  # Expired
+        assert session2 is not None  # Still valid
+        assert session3 is not None  # Still valid
     
     @pytest.mark.asyncio
     async def test_get_session_count(self):
@@ -189,8 +203,10 @@ class TestSQLiteRepository:
         count = await repo.get_session_count()
         assert count == 0
         
-        await repo.save_session("session-1", datetime.now(), datetime.now())
-        await repo.save_session("session-2", datetime.now(), datetime.now())
+        now = datetime.now()
+        expires_at = now + timedelta(days=7)
+        await repo.save_session("session-1", now, now, expires_at)
+        await repo.save_session("session-2", now, now, expires_at)
         
         count = await repo.get_session_count()
         assert count == 2
@@ -209,12 +225,14 @@ class TestSQLiteRepository:
         assert count == 0
         
         # Create sessions with messages
-        await repo.save_session("session-1", datetime.now(), datetime.now())
-        await repo.save_message("session-1", "user", "Hello", datetime.now())
-        await repo.save_message("session-1", "assistant", "Hi", datetime.now())
+        now = datetime.now()
+        expires_at = now + timedelta(days=7)
+        await repo.save_session("session-1", now, now, expires_at)
+        await repo.save_message("session-1", "user", "Hello", now)
+        await repo.save_message("session-1", "assistant", "Hi", now)
         
-        await repo.save_session("session-2", datetime.now(), datetime.now())
-        await repo.save_message("session-2", "user", "Test", datetime.now())
+        await repo.save_session("session-2", now, now, expires_at)
+        await repo.save_message("session-2", "user", "Test", now)
         
         count = await repo.get_total_message_count()
         assert count == 3
@@ -228,33 +246,39 @@ class TestSQLiteRepository:
         assert len(sessions) == 0
         
         # Create sessions
-        await repo.save_session("session-1", datetime.now(), datetime.now())
-        await repo.save_session("session-2", datetime.now(), datetime.now())
-        await repo.save_session("session-3", datetime.now(), datetime.now())
+        now = datetime.now()
+        expires_at = now + timedelta(days=7)
+        await repo.save_session("session-1", now, now, expires_at)
+        await repo.save_session("session-2", now, now, expires_at)
+        await repo.save_session("session-3", now, now, expires_at)
         
         sessions = await repo.get_all_sessions()
         assert len(sessions) == 3
         assert all("session_id" in s for s in sessions)
         assert all("created_at" in s for s in sessions)
         assert all("last_accessed" in s for s in sessions)
+        assert all("expires_at" in s for s in sessions)
     
     @pytest.mark.asyncio
     async def test_update_session_access_time(self):
-        """Test updating session access time"""
+        """Test updating session access time and expiry"""
         repo = SQLiteSessionRepository(db_path=":memory:")
         
         session_id = "test-session"
         created_at = datetime.now()
         first_access = datetime.now()
+        first_expires = first_access + timedelta(days=7)
         
-        await repo.save_session(session_id, created_at, first_access)
+        await repo.save_session(session_id, created_at, first_access, first_expires)
         
-        # Update access time
+        # Update access time and expiry
         import time
         time.sleep(0.01)
         second_access = datetime.now()
-        await repo.save_session(session_id, created_at, second_access)
+        second_expires = second_access + timedelta(days=7)
+        await repo.save_session(session_id, created_at, second_access, second_expires)
         
         # Verify updated
         session = await repo.get_session(session_id)
         assert session["last_accessed"] > first_access
+        assert session["expires_at"] > first_expires

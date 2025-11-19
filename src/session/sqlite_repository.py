@@ -42,12 +42,44 @@ class SQLiteSessionRepository(SessionRepository):
         
         cursor = conn.cursor()
         
+        # Check if sessions table exists and has expires_at column
+        cursor.execute("""
+            SELECT name FROM sqlite_master 
+            WHERE type='table' AND name='sessions'
+        """)
+        table_exists = cursor.fetchone() is not None
+        
+        if table_exists:
+            # Check if expires_at column exists
+            cursor.execute("PRAGMA table_info(sessions)")
+            columns = [row[1] for row in cursor.fetchall()]
+            
+            if "expires_at" not in columns:
+                # Add expires_at column with default value (7 days from now)
+                logger.info("Migrating sessions table: adding expires_at column")
+                
+                # First add column without default
+                cursor.execute("""
+                    ALTER TABLE sessions 
+                    ADD COLUMN expires_at TEXT
+                """)
+                
+                # Then update existing rows with expires_at = last_accessed + 7 days
+                cursor.execute("""
+                    UPDATE sessions 
+                    SET expires_at = datetime(last_accessed, '+7 days')
+                    WHERE expires_at IS NULL
+                """)
+                
+                conn.commit()
+        
         # Sessions table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS sessions (
                 session_id TEXT PRIMARY KEY,
                 created_at TEXT NOT NULL,
-                last_accessed TEXT NOT NULL
+                last_accessed TEXT NOT NULL,
+                expires_at TEXT NOT NULL
             )
         """)
         
@@ -80,6 +112,11 @@ class SQLiteSessionRepository(SessionRepository):
             ON sessions(last_accessed)
         """)
         
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_sessions_expires_at 
+            ON sessions(expires_at)
+        """)
+        
         conn.commit()
         if self.db_path != ":memory:":
             conn.close()
@@ -106,7 +143,8 @@ class SQLiteSessionRepository(SessionRepository):
         self, 
         session_id: str, 
         created_at: datetime, 
-        last_accessed: datetime
+        last_accessed: datetime,
+        expires_at: datetime
     ) -> bool:
         """Save or update session metadata"""
         try:
@@ -114,14 +152,16 @@ class SQLiteSessionRepository(SessionRepository):
             cursor = conn.cursor()
             
             cursor.execute("""
-                INSERT INTO sessions (session_id, created_at, last_accessed)
-                VALUES (?, ?, ?)
+                INSERT INTO sessions (session_id, created_at, last_accessed, expires_at)
+                VALUES (?, ?, ?, ?)
                 ON CONFLICT(session_id) DO UPDATE SET
-                    last_accessed = excluded.last_accessed
+                    last_accessed = excluded.last_accessed,
+                    expires_at = excluded.expires_at
             """, (
                 session_id,
                 created_at.isoformat(),
-                last_accessed.isoformat()
+                last_accessed.isoformat(),
+                expires_at.isoformat()
             ))
             
             conn.commit()
@@ -139,7 +179,7 @@ class SQLiteSessionRepository(SessionRepository):
             cursor = conn.cursor()
             
             cursor.execute("""
-                SELECT session_id, created_at, last_accessed
+                SELECT session_id, created_at, last_accessed, expires_at
                 FROM sessions
                 WHERE session_id = ?
             """, (session_id,))
@@ -151,7 +191,8 @@ class SQLiteSessionRepository(SessionRepository):
                 return {
                     "session_id": row["session_id"],
                     "created_at": datetime.fromisoformat(row["created_at"]),
-                    "last_accessed": datetime.fromisoformat(row["last_accessed"])
+                    "last_accessed": datetime.fromisoformat(row["last_accessed"]),
+                    "expires_at": datetime.fromisoformat(row["expires_at"])
                 }
             return None
             
@@ -187,7 +228,7 @@ class SQLiteSessionRepository(SessionRepository):
             cursor = conn.cursor()
             
             cursor.execute("""
-                SELECT session_id, created_at, last_accessed
+                SELECT session_id, created_at, last_accessed, expires_at
                 FROM sessions
                 ORDER BY last_accessed DESC
             """)
@@ -199,7 +240,8 @@ class SQLiteSessionRepository(SessionRepository):
                 {
                     "session_id": row["session_id"],
                     "created_at": datetime.fromisoformat(row["created_at"]),
-                    "last_accessed": datetime.fromisoformat(row["last_accessed"])
+                    "last_accessed": datetime.fromisoformat(row["last_accessed"]),
+                    "expires_at": datetime.fromisoformat(row["expires_at"])
                 }
                 for row in rows
             ]
@@ -310,14 +352,14 @@ class SQLiteSessionRepository(SessionRepository):
             return False
     
     async def cleanup_expired_sessions(self, expiry_time: datetime) -> int:
-        """Delete sessions older than expiry_time"""
+        """Delete sessions that have expired (expires_at < now)"""
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
             
             cursor.execute("""
                 DELETE FROM sessions
-                WHERE last_accessed < ?
+                WHERE expires_at < ?
             """, (expiry_time.isoformat(),))
             
             deleted_count = cursor.rowcount

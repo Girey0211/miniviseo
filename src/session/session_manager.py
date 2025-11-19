@@ -24,12 +24,14 @@ class ConversationHistory:
     async def add_message(self, role: str, content: str, metadata: Optional[Dict] = None):
         """Add a message to conversation history"""
         timestamp = datetime.now()
+        expires_at = timestamp + timedelta(days=7)  # 7일 후 만료
         
-        # Ensure session exists in repository first
+        # Ensure session exists in repository first and update expiry
         await self.repository.save_session(
             session_id=self.session_id,
             created_at=self.created_at,
-            last_accessed=timestamp
+            last_accessed=timestamp,
+            expires_at=expires_at
         )
         
         # Save message to repository
@@ -80,24 +82,29 @@ class SessionManager:
     def __init__(
         self, 
         repository: Optional[SessionRepository] = None,
-        session_timeout_minutes: int = 60
+        session_expiry_days: int = 7
     ):
         self.repository = repository or SQLiteSessionRepository()
         self.sessions: Dict[str, ConversationHistory] = {}
-        self.session_timeout = timedelta(minutes=session_timeout_minutes)
+        self.session_expiry_days = session_expiry_days
         self._cleanup_task = None
-        logger.info(f"SessionManager initialized (timeout: {session_timeout_minutes}m)")
+        logger.info(f"SessionManager initialized (expiry: {session_expiry_days} days)")
     
     async def get_or_create_session(self, session_id: str) -> ConversationHistory:
         """Get existing session or create new one"""
+        now = datetime.now()
+        expires_at = now + timedelta(days=self.session_expiry_days)
+        
         # Check in-memory cache first
         if session_id in self.sessions:
             session = self.sessions[session_id]
-            session.last_accessed = datetime.now()
+            session.last_accessed = now
+            # 세션 사용 시마다 만료 기한 갱신 (7일 연장)
             await self.repository.save_session(
                 session_id=session_id,
                 created_at=session.created_at,
-                last_accessed=session.last_accessed
+                last_accessed=session.last_accessed,
+                expires_at=expires_at
             )
             return session
         
@@ -108,13 +115,15 @@ class SessionManager:
             # Restore from repository
             session = ConversationHistory(session_id, self.repository)
             session.created_at = session_data["created_at"]
-            session.last_accessed = datetime.now()
+            session.last_accessed = now
             self.sessions[session_id] = session
             
+            # 세션 복원 시에도 만료 기한 갱신
             await self.repository.save_session(
                 session_id=session_id,
                 created_at=session.created_at,
-                last_accessed=session.last_accessed
+                last_accessed=session.last_accessed,
+                expires_at=expires_at
             )
             
             logger.info(f"Restored session from storage: {session_id}")
@@ -126,7 +135,8 @@ class SessionManager:
             await self.repository.save_session(
                 session_id=session_id,
                 created_at=session.created_at,
-                last_accessed=session.last_accessed
+                last_accessed=session.last_accessed,
+                expires_at=expires_at
             )
             
             logger.info(f"Created new session: {session_id}")
@@ -165,24 +175,24 @@ class SessionManager:
         return deleted
     
     async def cleanup_expired_sessions(self):
-        """Remove expired sessions"""
+        """Remove expired sessions (expires_at < now)"""
         now = datetime.now()
-        expiry_time = now - self.session_timeout
         
-        # Cleanup from repository
-        deleted_count = await self.repository.cleanup_expired_sessions(expiry_time)
+        # Cleanup from repository (sessions where expires_at < now)
+        deleted_count = await self.repository.cleanup_expired_sessions(now)
         
-        # Cleanup from memory cache
-        expired = [
-            sid for sid, session in self.sessions.items()
-            if now - session.last_accessed > self.session_timeout
-        ]
+        # Cleanup from memory cache - remove sessions that are in deleted list
+        # We need to check repository to see which sessions still exist
+        expired_in_memory = []
+        for sid in list(self.sessions.keys()):
+            session_data = await self.repository.get_session(sid)
+            if not session_data:
+                # Session was deleted from repository
+                expired_in_memory.append(sid)
+                del self.sessions[sid]
         
-        for sid in expired:
-            del self.sessions[sid]
-        
-        if deleted_count > 0 or expired:
-            logger.info(f"Cleaned up {deleted_count} expired sessions from storage, {len(expired)} from cache")
+        if deleted_count > 0 or expired_in_memory:
+            logger.info(f"Cleaned up {deleted_count} expired sessions from storage, {len(expired_in_memory)} from cache")
     
     async def get_active_session_count(self) -> int:
         """Get number of active sessions"""

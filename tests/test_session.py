@@ -237,21 +237,19 @@ class TestSessionManager:
     
     @pytest.mark.asyncio
     async def test_cleanup_expired_sessions(self):
-        """Test cleaning up expired sessions"""
+        """Test cleaning up expired sessions based on expires_at"""
         from session.sqlite_repository import SQLiteSessionRepository
         repo = SQLiteSessionRepository(db_path=":memory:")
-        manager = SessionManager(repository=repo, session_timeout_minutes=1)
+        manager = SessionManager(repository=repo, session_expiry_days=7)
         
         # Create sessions
         session1 = await manager.get_or_create_session("session-1")
         session2 = await manager.get_or_create_session("session-2")
         
         # Manually set session1 as expired in repository
-        expired_time = datetime.now() - timedelta(minutes=2)
-        await repo.save_session("session-1", session1.created_at, expired_time)
-        
-        # Also update in-memory session
-        session1.last_accessed = expired_time
+        now = datetime.now()
+        expired_time = now - timedelta(days=1)  # Expired yesterday
+        await repo.save_session("session-1", session1.created_at, now, expired_time)
         
         count = await manager.get_active_session_count()
         assert count == 2
@@ -266,16 +264,16 @@ class TestSessionManager:
         assert "session-2" in manager.sessions
     
     @pytest.mark.asyncio
-    async def test_session_timeout_configuration(self):
-        """Test session timeout configuration"""
+    async def test_session_expiry_configuration(self):
+        """Test session expiry configuration"""
         from session.sqlite_repository import SQLiteSessionRepository
         repo = SQLiteSessionRepository(db_path=":memory:")
-        manager = SessionManager(repository=repo, session_timeout_minutes=30)
-        assert manager.session_timeout == timedelta(minutes=30)
+        manager = SessionManager(repository=repo, session_expiry_days=7)
+        assert manager.session_expiry_days == 7
         
         repo2 = SQLiteSessionRepository(db_path=":memory:")
-        manager2 = SessionManager(repository=repo2, session_timeout_minutes=120)
-        assert manager2.session_timeout == timedelta(minutes=120)
+        manager2 = SessionManager(repository=repo2, session_expiry_days=30)
+        assert manager2.session_expiry_days == 30
     
     @pytest.mark.asyncio
     async def test_get_active_session_count(self):
