@@ -38,7 +38,7 @@ dev = [
 ai-assistant = "src.app:main"
 assistant = "src.app:main"
 aia = "src.app:main"
-aia-server = "uvicorn:main"
+server = "src.server:main"
 ai = "src.app:main"
 viseo = "src.app:main"
 

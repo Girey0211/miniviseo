@@ -252,6 +252,11 @@ async def process_request(request: AssistantRequest):
         raise HTTPException(status_code=500, detail=f"서버 오류: {str(e)}")
 
 
-if __name__ == "__main__":
+def main():
+    """Entry point for server"""
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+if __name__ == "__main__":
+    main()
