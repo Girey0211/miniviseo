@@ -279,15 +279,15 @@ async def add_event(title: str, date: str = "", time: str = "", description: str
             if not title_prop_name:
                 raise ValueError("No title property found in database")
             
-            # Log warning if description property not found but description provided
+            # Log info if description property not found but description will be saved to page content
             if description and not description_prop_name:
                 import sys
                 from pathlib import Path
                 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
                 from utils.logger import get_logger
                 logger = get_logger()
-                logger.warning(f"Description provided but no rich_text property found in database. Description will be ignored: {description[:100]}...")
-                logger.warning("To save descriptions, add a '설명' (Rich Text) property to your Notion Calendar database.")
+                logger.info(f"No '설명' property found. Description will be saved to page content (본문) instead.")
+                logger.info("To also save in properties, add a '설명' (Rich Text) property to your database.")
             
             # Create page properties using discovered property names
             properties = {
@@ -307,23 +307,51 @@ async def add_event(title: str, date: str = "", time: str = "", description: str
                 }
             }
             
-            # Add description if provided and property exists
-            if description and description_prop_name:
-                properties[description_prop_name] = {
-                    "rich_text": [
-                        {
-                            "text": {
-                                "content": description[:2000]  # Notion limit
-                            }
-                        }
-                    ]
-                }
-            
-            # Create page using direct HTTP request (headers already defined above)
+            # Prepare page body with properties
             body = {
                 "parent": {"database_id": formatted_db_id},
                 "properties": properties
             }
+            
+            # Add description to page content (본문) if provided
+            if description:
+                # Split description into chunks if too long (Notion has 2000 char limit per block)
+                chunks = []
+                chunk_size = 2000
+                for i in range(0, len(description), chunk_size):
+                    chunks.append(description[i:i + chunk_size])
+                
+                # Create paragraph blocks for page content
+                children = []
+                for chunk in chunks:
+                    children.append({
+                        "object": "block",
+                        "type": "paragraph",
+                        "paragraph": {
+                            "rich_text": [
+                                {
+                                    "type": "text",
+                                    "text": {
+                                        "content": chunk
+                                    }
+                                }
+                            ]
+                        }
+                    })
+                
+                body["children"] = children
+                
+                # Also add to property if it exists (for backward compatibility)
+                if description_prop_name:
+                    properties[description_prop_name] = {
+                        "rich_text": [
+                            {
+                                "text": {
+                                    "content": description[:2000]  # Notion limit
+                                }
+                            }
+                        ]
+                    }
             
             url = "https://api.notion.com/v1/pages"
             
