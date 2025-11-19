@@ -100,15 +100,27 @@ def check_database_schema():
             print("Status:")
             print(f"  {'✅' if has_title else '❌'} Title property (type: title)")
             print(f"  {'✅' if has_date else '❌'} 날짜 property (type: date)")
-            print(f"  {'✅' if has_description else '⚠️ '} 설명 property (type: rich_text) - optional")
+            print(f"  {'✅' if has_description else '⚠️ '} 설명 property (type: rich_text) - optional but HIGHLY RECOMMENDED")
             
             if not has_title or not has_date:
                 print()
                 print("❌ Missing required properties!")
                 print("Please add the missing properties to your Notion database.")
+            elif not has_description:
+                print()
+                print("⚠️  Warning: '설명' property not found!")
+                print("Without this property, you cannot save detailed information like:")
+                print("  • Web search results in calendar events")
+                print("  • Additional context from previous actions")
+                print()
+                print("To add '설명' property:")
+                print("  1. Open your Notion Calendar database")
+                print("  2. Click '+' to add a new property")
+                print("  3. Name it '설명' (Korean for 'Description')")
+                print("  4. Select 'Text' type (Rich Text)")
             else:
                 print()
-                print("✅ All required properties found!")
+                print("✅ All properties found! Your database is ready.")
     
     except Exception as e:
         print(f"❌ Error: {e}")

@@ -279,6 +279,16 @@ async def add_event(title: str, date: str = "", time: str = "", description: str
             if not title_prop_name:
                 raise ValueError("No title property found in database")
             
+            # Log warning if description property not found but description provided
+            if description and not description_prop_name:
+                import sys
+                from pathlib import Path
+                sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+                from utils.logger import get_logger
+                logger = get_logger()
+                logger.warning(f"Description provided but no rich_text property found in database. Description will be ignored: {description[:100]}...")
+                logger.warning("To save descriptions, add a '설명' (Rich Text) property to your Notion Calendar database.")
+            
             # Create page properties using discovered property names
             properties = {
                 title_prop_name: {
