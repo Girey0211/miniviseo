@@ -242,6 +242,69 @@ class TestRequestParser:
             assert len(result.actions) == 1
             assert result.actions[0].intent == "unknown"
             assert result.actions[0].agent == "FallbackAgent"
+    
+    @pytest.mark.asyncio
+    async def test_parse_search_and_note_request(self, parser, mock_openai_response):
+        """Test parsing request that needs web search before creating note"""
+        response_json = '''{"actions": [
+            {"intent": "web_search", "agent": "WebAgent", "params": {"query": "테슬라 최근 근황"}, "use_results_from": []},
+            {"intent": "write_note", "agent": "NoteAgent", "params": {"text": "테슬라 최근 근황"}, "use_results_from": [1]}
+        ]}'''
+        
+        with patch.object(parser.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = mock_openai_response(response_json)
+            
+            result = await parser.parse_request("테슬라 최근 근황 정리,요약해서 메모 남겨줘")
+            
+            assert isinstance(result, ParsedRequest)
+            assert len(result.actions) == 2
+            assert result.actions[0].intent == "web_search"
+            assert result.actions[0].agent == "WebAgent"
+            assert result.actions[0].params["query"] == "테슬라 최근 근황"
+            assert result.actions[0].use_results_from == []
+            assert result.actions[1].intent == "write_note"
+            assert result.actions[1].agent == "NoteAgent"
+            assert result.actions[1].use_results_from == [1]
+    
+    @pytest.mark.asyncio
+    async def test_parse_us_stock_market_note_request(self, parser, mock_openai_response):
+        """Test parsing US stock market info request with note"""
+        response_json = '''{"actions": [
+            {"intent": "web_search", "agent": "WebAgent", "params": {"query": "미 증시 현황"}, "use_results_from": []},
+            {"intent": "write_note", "agent": "NoteAgent", "params": {"text": "미 증시 현황"}, "use_results_from": [1]}
+        ]}'''
+        
+        with patch.object(parser.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = mock_openai_response(response_json)
+            
+            result = await parser.parse_request("미 증시 현황 요약해서 노트에 저장")
+            
+            assert isinstance(result, ParsedRequest)
+            assert len(result.actions) == 2
+            assert result.actions[0].intent == "web_search"
+            assert result.actions[0].agent == "WebAgent"
+            assert result.actions[1].intent == "write_note"
+            assert result.actions[1].agent == "NoteAgent"
+            assert result.actions[1].use_results_from == [1]
+    
+    @pytest.mark.asyncio
+    async def test_parse_python_news_search_and_note(self, parser, mock_openai_response):
+        """Test parsing Python news search with note creation"""
+        response_json = '''{"actions": [
+            {"intent": "web_search", "agent": "WebAgent", "params": {"query": "파이썬 최신 뉴스"}, "use_results_from": []},
+            {"intent": "write_note", "agent": "NoteAgent", "params": {"text": "파이썬 최신 뉴스"}, "use_results_from": [1]}
+        ]}'''
+        
+        with patch.object(parser.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = mock_openai_response(response_json)
+            
+            result = await parser.parse_request("파이썬 최신 뉴스 검색하고 메모해줘")
+            
+            assert isinstance(result, ParsedRequest)
+            assert len(result.actions) == 2
+            assert result.actions[0].intent == "web_search"
+            assert result.actions[1].intent == "write_note"
+            assert result.actions[1].use_results_from == [1]
 
 
 class TestParsedRequestSchema:

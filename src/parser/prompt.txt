@@ -32,10 +32,16 @@ Parameter extraction rules:
 - For calendar: pass the relevant text as "text" (agent will process with LLM)
 - For web: extract "query" or "url"
 
+CRITICAL: Detect when information gathering is needed BEFORE creating notes/events:
+- Keywords indicating web search needed: "근황", "최근", "뉴스", "정보", "찾아", "검색", "알아봐", "조사"
+- If user asks to save/memo/note information about something they don't have (e.g., "테슬라 근황", "미 증시 현황"):
+  1. FIRST: web_search to gather information
+  2. THEN: write_note or calendar_add with use_results_from: [1]
+
 IMPORTANT: Analyze the input and extract ALL distinct actions. Execute them in logical order:
 1. Greetings/small talk first (FallbackAgent)
-2. Information gathering (WebAgent)
-3. Action execution (NoteAgent, CalendarAgent)
+2. Information gathering (WebAgent) - ALWAYS needed when user asks about external information
+3. Action execution (NoteAgent, CalendarAgent) - with use_results_from if depends on step 2
 
 use_results_from field:
 - Specify which previous actions' results should be used
@@ -62,6 +68,22 @@ Multiple actions with dependencies:
   "actions": [
     {{"intent": "web_search", "agent": "WebAgent", "params": {{"query": "파이썬 최신 뉴스"}}, "use_results_from": []}},
     {{"intent": "write_note", "agent": "NoteAgent", "params": {{"text": "파이썬 최신 뉴스"}}, "use_results_from": [1]}}
+  ]
+}}
+
+- "테슬라 최근 근황 정리해서 메모 남겨줘" ->
+{{
+  "actions": [
+    {{"intent": "web_search", "agent": "WebAgent", "params": {{"query": "테슬라 최근 근황"}}, "use_results_from": []}},
+    {{"intent": "write_note", "agent": "NoteAgent", "params": {{"text": "테슬라 최근 근황"}}, "use_results_from": [1]}}
+  ]
+}}
+
+- "미 증시 현황 요약해서 노트에 저장" ->
+{{
+  "actions": [
+    {{"intent": "web_search", "agent": "WebAgent", "params": {{"query": "미 증시 현황"}}, "use_results_from": []}},
+    {{"intent": "write_note", "agent": "NoteAgent", "params": {{"text": "미 증시 현황"}}, "use_results_from": [1]}}
   ]
 }}
 
