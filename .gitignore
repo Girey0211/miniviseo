@@ -38,3 +38,8 @@ htmlcov/
 
 # uv
 .uv/
+
+# Data
+data/
+*.db
+*.db-journal

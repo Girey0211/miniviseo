@@ -14,275 +14,368 @@ from session import SessionManager, ConversationHistory
 class TestConversationHistory:
     """Test ConversationHistory class"""
     
-    def test_create_history(self):
+    @pytest.mark.asyncio
+    async def test_create_history(self):
         """Test creating conversation history"""
-        history = ConversationHistory("test-session")
+        from session.sqlite_repository import SQLiteSessionRepository
+        repo = SQLiteSessionRepository(db_path=":memory:")
+        history = ConversationHistory("test-session", repo)
         assert history.session_id == "test-session"
-        assert len(history.messages) == 0
         assert isinstance(history.created_at, datetime)
     
-    def test_add_message(self):
+    @pytest.mark.asyncio
+    async def test_add_message(self):
         """Test adding messages to history"""
-        history = ConversationHistory("test-session")
+        from session.sqlite_repository import SQLiteSessionRepository
+        repo = SQLiteSessionRepository(db_path=":memory:")
+        history = ConversationHistory("test-session", repo)
         
-        history.add_message("user", "안녕하세요")
-        assert len(history.messages) == 1
-        assert history.messages[0]["role"] == "user"
-        assert history.messages[0]["content"] == "안녕하세요"
+        await history.add_message("user", "안녕하세요")
+        messages = await history.get_messages()
+        assert len(messages) == 1
+        assert messages[0]["role"] == "user"
+        assert messages[0]["content"] == "안녕하세요"
         
-        history.add_message("assistant", "안녕하세요! 무엇을 도와드릴까요?")
-        assert len(history.messages) == 2
+        await history.add_message("assistant", "안녕하세요! 무엇을 도와드릴까요?")
+        messages = await history.get_messages()
+        assert len(messages) == 2
     
-    def test_add_message_with_metadata(self):
+    @pytest.mark.asyncio
+    async def test_add_message_with_metadata(self):
         """Test adding message with metadata"""
-        history = ConversationHistory("test-session")
+        from session.sqlite_repository import SQLiteSessionRepository
+        repo = SQLiteSessionRepository(db_path=":memory:")
+        history = ConversationHistory("test-session", repo)
         
         metadata = {"intent": "greeting", "agent": "FallbackAgent"}
-        history.add_message("assistant", "안녕하세요", metadata=metadata)
+        await history.add_message("assistant", "안녕하세요", metadata=metadata)
         
-        assert history.messages[0]["metadata"] == metadata
+        messages = await history.get_messages()
+        assert messages[0]["metadata"] == metadata
     
-    def test_get_messages(self):
+    @pytest.mark.asyncio
+    async def test_get_messages(self):
         """Test getting all messages"""
-        history = ConversationHistory("test-session")
+        from session.sqlite_repository import SQLiteSessionRepository
+        repo = SQLiteSessionRepository(db_path=":memory:")
+        history = ConversationHistory("test-session", repo)
         
-        history.add_message("user", "메시지 1")
-        history.add_message("assistant", "응답 1")
-        history.add_message("user", "메시지 2")
+        await history.add_message("user", "메시지 1")
+        await history.add_message("assistant", "응답 1")
+        await history.add_message("user", "메시지 2")
         
-        messages = history.get_messages()
+        messages = await history.get_messages()
         assert len(messages) == 3
     
-    def test_get_messages_with_limit(self):
+    @pytest.mark.asyncio
+    async def test_get_messages_with_limit(self):
         """Test getting limited messages"""
-        history = ConversationHistory("test-session")
+        from session.sqlite_repository import SQLiteSessionRepository
+        repo = SQLiteSessionRepository(db_path=":memory:")
+        history = ConversationHistory("test-session", repo)
         
         for i in range(10):
-            history.add_message("user", f"메시지 {i}")
+            await history.add_message("user", f"메시지 {i}")
         
-        recent = history.get_messages(limit=3)
+        recent = await history.get_messages(limit=3)
         assert len(recent) == 3
         assert recent[0]["content"] == "메시지 7"
         assert recent[-1]["content"] == "메시지 9"
     
-    def test_get_context_for_llm(self):
+    @pytest.mark.asyncio
+    async def test_get_context_for_llm(self):
         """Test getting LLM context format"""
-        history = ConversationHistory("test-session")
+        from session.sqlite_repository import SQLiteSessionRepository
+        repo = SQLiteSessionRepository(db_path=":memory:")
+        history = ConversationHistory("test-session", repo)
         
-        history.add_message("user", "안녕하세요")
-        history.add_message("assistant", "안녕하세요!")
+        await history.add_message("user", "안녕하세요")
+        await history.add_message("assistant", "안녕하세요!")
         
-        context = history.get_context_for_llm()
+        context = await history.get_context_for_llm()
         assert len(context) == 2
         assert context[0] == {"role": "user", "content": "안녕하세요"}
         assert context[1] == {"role": "assistant", "content": "안녕하세요!"}
         assert "timestamp" not in context[0]
         assert "metadata" not in context[0]
     
-    def test_get_context_for_llm_with_limit(self):
+    @pytest.mark.asyncio
+    async def test_get_context_for_llm_with_limit(self):
         """Test getting limited LLM context"""
-        history = ConversationHistory("test-session")
+        from session.sqlite_repository import SQLiteSessionRepository
+        repo = SQLiteSessionRepository(db_path=":memory:")
+        history = ConversationHistory("test-session", repo)
         
         for i in range(20):
-            history.add_message("user", f"메시지 {i}")
+            await history.add_message("user", f"메시지 {i}")
         
-        context = history.get_context_for_llm(limit=5)
+        context = await history.get_context_for_llm(limit=5)
         assert len(context) == 5
     
-    def test_clear_history(self):
+    @pytest.mark.asyncio
+    async def test_clear_history(self):
         """Test clearing conversation history"""
-        history = ConversationHistory("test-session")
+        from session.sqlite_repository import SQLiteSessionRepository
+        repo = SQLiteSessionRepository(db_path=":memory:")
+        history = ConversationHistory("test-session", repo)
         
-        history.add_message("user", "메시지 1")
-        history.add_message("assistant", "응답 1")
-        assert len(history.messages) == 2
+        await history.add_message("user", "메시지 1")
+        await history.add_message("assistant", "응답 1")
+        messages = await history.get_messages()
+        assert len(messages) == 2
         
-        history.clear()
-        assert len(history.messages) == 0
+        await history.clear()
+        messages = await history.get_messages()
+        assert len(messages) == 0
     
-    def test_last_accessed_updates(self):
+    @pytest.mark.asyncio
+    async def test_last_accessed_updates(self):
         """Test that last_accessed updates on message add"""
-        history = ConversationHistory("test-session")
+        from session.sqlite_repository import SQLiteSessionRepository
+        repo = SQLiteSessionRepository(db_path=":memory:")
+        history = ConversationHistory("test-session", repo)
         initial_time = history.last_accessed
         
         import time
         time.sleep(0.01)
         
-        history.add_message("user", "메시지")
+        await history.add_message("user", "메시지")
         assert history.last_accessed > initial_time
 
 
 class TestSessionManager:
     """Test SessionManager class"""
     
-    def test_create_manager(self):
+    @pytest.mark.asyncio
+    async def test_create_manager(self):
         """Test creating session manager"""
-        manager = SessionManager()
-        assert manager.get_active_session_count() == 0
+        from session.sqlite_repository import SQLiteSessionRepository
+        repo = SQLiteSessionRepository(db_path=":memory:")
+        manager = SessionManager(repository=repo)
+        count = await manager.get_active_session_count()
+        assert count == 0
     
-    def test_get_or_create_session(self):
+    @pytest.mark.asyncio
+    async def test_get_or_create_session(self):
         """Test getting or creating session"""
-        manager = SessionManager()
+        from session.sqlite_repository import SQLiteSessionRepository
+        repo = SQLiteSessionRepository(db_path=":memory:")
+        manager = SessionManager(repository=repo)
         
-        session1 = manager.get_or_create_session("session-1")
+        session1 = await manager.get_or_create_session("session-1")
         assert session1.session_id == "session-1"
-        assert manager.get_active_session_count() == 1
+        count = await manager.get_active_session_count()
+        assert count == 1
         
         # Get same session again
-        session2 = manager.get_or_create_session("session-1")
+        session2 = await manager.get_or_create_session("session-1")
         assert session1 is session2
-        assert manager.get_active_session_count() == 1
+        count = await manager.get_active_session_count()
+        assert count == 1
     
-    def test_get_session(self):
+    @pytest.mark.asyncio
+    async def test_get_session(self):
         """Test getting existing session"""
-        manager = SessionManager()
+        from session.sqlite_repository import SQLiteSessionRepository
+        repo = SQLiteSessionRepository(db_path=":memory:")
+        manager = SessionManager(repository=repo)
         
-        manager.get_or_create_session("session-1")
+        await manager.get_or_create_session("session-1")
         
-        session = manager.get_session("session-1")
+        session = await manager.get_session("session-1")
         assert session is not None
         assert session.session_id == "session-1"
         
         # Non-existent session
-        session = manager.get_session("non-existent")
+        session = await manager.get_session("non-existent")
         assert session is None
     
-    def test_delete_session(self):
+    @pytest.mark.asyncio
+    async def test_delete_session(self):
         """Test deleting session"""
-        manager = SessionManager()
+        from session.sqlite_repository import SQLiteSessionRepository
+        repo = SQLiteSessionRepository(db_path=":memory:")
+        manager = SessionManager(repository=repo)
         
-        manager.get_or_create_session("session-1")
-        assert manager.get_active_session_count() == 1
+        await manager.get_or_create_session("session-1")
+        count = await manager.get_active_session_count()
+        assert count == 1
         
-        deleted = manager.delete_session("session-1")
+        deleted = await manager.delete_session("session-1")
         assert deleted is True
-        assert manager.get_active_session_count() == 0
+        count = await manager.get_active_session_count()
+        assert count == 0
         
         # Delete non-existent session
-        deleted = manager.delete_session("non-existent")
+        deleted = await manager.delete_session("non-existent")
         assert deleted is False
     
-    def test_multiple_sessions(self):
+    @pytest.mark.asyncio
+    async def test_multiple_sessions(self):
         """Test managing multiple sessions"""
-        manager = SessionManager()
+        from session.sqlite_repository import SQLiteSessionRepository
+        repo = SQLiteSessionRepository(db_path=":memory:")
+        manager = SessionManager(repository=repo)
         
-        session1 = manager.get_or_create_session("user-1")
-        session2 = manager.get_or_create_session("user-2")
-        session3 = manager.get_or_create_session("user-3")
+        session1 = await manager.get_or_create_session("user-1")
+        session2 = await manager.get_or_create_session("user-2")
+        session3 = await manager.get_or_create_session("user-3")
         
-        assert manager.get_active_session_count() == 3
+        count = await manager.get_active_session_count()
+        assert count == 3
         
-        session1.add_message("user", "메시지 1")
-        session2.add_message("user", "메시지 2")
+        await session1.add_message("user", "메시지 1")
+        await session2.add_message("user", "메시지 2")
         
-        assert len(session1.messages) == 1
-        assert len(session2.messages) == 1
-        assert len(session3.messages) == 0
+        messages1 = await session1.get_messages()
+        messages2 = await session2.get_messages()
+        messages3 = await session3.get_messages()
+        
+        assert len(messages1) == 1
+        assert len(messages2) == 1
+        assert len(messages3) == 0
     
-    def test_cleanup_expired_sessions(self):
+    @pytest.mark.asyncio
+    async def test_cleanup_expired_sessions(self):
         """Test cleaning up expired sessions"""
-        manager = SessionManager(session_timeout_minutes=1)
+        from session.sqlite_repository import SQLiteSessionRepository
+        repo = SQLiteSessionRepository(db_path=":memory:")
+        manager = SessionManager(repository=repo, session_timeout_minutes=1)
         
         # Create sessions
-        session1 = manager.get_or_create_session("session-1")
-        session2 = manager.get_or_create_session("session-2")
+        session1 = await manager.get_or_create_session("session-1")
+        session2 = await manager.get_or_create_session("session-2")
         
-        # Manually set session1 as expired
-        session1.last_accessed = datetime.now() - timedelta(minutes=2)
+        # Manually set session1 as expired in repository
+        expired_time = datetime.now() - timedelta(minutes=2)
+        await repo.save_session("session-1", session1.created_at, expired_time)
         
-        assert manager.get_active_session_count() == 2
+        # Also update in-memory session
+        session1.last_accessed = expired_time
         
-        manager.cleanup_expired_sessions()
+        count = await manager.get_active_session_count()
+        assert count == 2
         
-        assert manager.get_active_session_count() == 1
-        assert manager.get_session("session-1") is None
-        assert manager.get_session("session-2") is not None
+        await manager.cleanup_expired_sessions()
+        
+        count = await manager.get_active_session_count()
+        assert count == 1
+        
+        # Session should be removed from memory cache
+        assert "session-1" not in manager.sessions
+        assert "session-2" in manager.sessions
     
-    def test_session_timeout_configuration(self):
+    @pytest.mark.asyncio
+    async def test_session_timeout_configuration(self):
         """Test session timeout configuration"""
-        manager = SessionManager(session_timeout_minutes=30)
+        from session.sqlite_repository import SQLiteSessionRepository
+        repo = SQLiteSessionRepository(db_path=":memory:")
+        manager = SessionManager(repository=repo, session_timeout_minutes=30)
         assert manager.session_timeout == timedelta(minutes=30)
         
-        manager2 = SessionManager(session_timeout_minutes=120)
+        repo2 = SQLiteSessionRepository(db_path=":memory:")
+        manager2 = SessionManager(repository=repo2, session_timeout_minutes=120)
         assert manager2.session_timeout == timedelta(minutes=120)
     
-    def test_get_active_session_count(self):
+    @pytest.mark.asyncio
+    async def test_get_active_session_count(self):
         """Test getting active session count"""
-        manager = SessionManager()
+        from session.sqlite_repository import SQLiteSessionRepository
+        repo = SQLiteSessionRepository(db_path=":memory:")
+        manager = SessionManager(repository=repo)
         
-        assert manager.get_active_session_count() == 0
+        count = await manager.get_active_session_count()
+        assert count == 0
         
-        manager.get_or_create_session("session-1")
-        assert manager.get_active_session_count() == 1
+        await manager.get_or_create_session("session-1")
+        count = await manager.get_active_session_count()
+        assert count == 1
         
-        manager.get_or_create_session("session-2")
-        manager.get_or_create_session("session-3")
-        assert manager.get_active_session_count() == 3
+        await manager.get_or_create_session("session-2")
+        await manager.get_or_create_session("session-3")
+        count = await manager.get_active_session_count()
+        assert count == 3
         
-        manager.delete_session("session-2")
-        assert manager.get_active_session_count() == 2
+        await manager.delete_session("session-2")
+        count = await manager.get_active_session_count()
+        assert count == 2
 
 
 class TestSessionIntegration:
     """Integration tests for session management"""
     
-    def test_conversation_flow(self):
+    @pytest.mark.asyncio
+    async def test_conversation_flow(self):
         """Test complete conversation flow"""
-        manager = SessionManager()
-        session = manager.get_or_create_session("user-123")
+        from session.sqlite_repository import SQLiteSessionRepository
+        repo = SQLiteSessionRepository(db_path=":memory:")
+        manager = SessionManager(repository=repo)
+        session = await manager.get_or_create_session("user-123")
         
         # User asks to create note
-        session.add_message("user", "오늘 한 일 메모해줘: 프로젝트 완료")
-        session.add_message(
+        await session.add_message("user", "오늘 한 일 메모해줘: 프로젝트 완료")
+        await session.add_message(
             "assistant", 
             "메모를 작성했습니다.",
             metadata={"intent": "write_note", "agent": "NoteAgent"}
         )
         
         # User asks to list notes
-        session.add_message("user", "내 메모 목록 보여줘")
-        session.add_message(
+        await session.add_message("user", "내 메모 목록 보여줘")
+        await session.add_message(
             "assistant",
             "메모 목록입니다: ...",
             metadata={"intent": "list_notes", "agent": "NoteAgent"}
         )
         
-        assert len(session.messages) == 4
+        messages = await session.get_messages()
+        assert len(messages) == 4
         
         # Get context for LLM
-        context = session.get_context_for_llm()
+        context = await session.get_context_for_llm()
         assert len(context) == 4
         assert context[0]["role"] == "user"
         assert context[1]["role"] == "assistant"
     
-    def test_session_persistence_across_requests(self):
+    @pytest.mark.asyncio
+    async def test_session_persistence_across_requests(self):
         """Test session persists across multiple requests"""
-        manager = SessionManager()
+        from session.sqlite_repository import SQLiteSessionRepository
+        repo = SQLiteSessionRepository(db_path=":memory:")
+        manager = SessionManager(repository=repo)
         
         # First request
-        session1 = manager.get_or_create_session("user-456")
-        session1.add_message("user", "안녕하세요")
-        session1.add_message("assistant", "안녕하세요!")
+        session1 = await manager.get_or_create_session("user-456")
+        await session1.add_message("user", "안녕하세요")
+        await session1.add_message("assistant", "안녕하세요!")
         
         # Second request (same session)
-        session2 = manager.get_or_create_session("user-456")
+        session2 = await manager.get_or_create_session("user-456")
         assert session1 is session2
-        assert len(session2.messages) == 2
+        messages = await session2.get_messages()
+        assert len(messages) == 2
         
-        session2.add_message("user", "메모 작성해줘")
-        assert len(session2.messages) == 3
+        await session2.add_message("user", "메모 작성해줘")
+        messages = await session2.get_messages()
+        assert len(messages) == 3
     
-    def test_isolated_sessions(self):
+    @pytest.mark.asyncio
+    async def test_isolated_sessions(self):
         """Test that sessions are isolated from each other"""
-        manager = SessionManager()
+        from session.sqlite_repository import SQLiteSessionRepository
+        repo = SQLiteSessionRepository(db_path=":memory:")
+        manager = SessionManager(repository=repo)
         
-        session_a = manager.get_or_create_session("user-a")
-        session_b = manager.get_or_create_session("user-b")
+        session_a = await manager.get_or_create_session("user-a")
+        session_b = await manager.get_or_create_session("user-b")
         
-        session_a.add_message("user", "User A 메시지")
-        session_b.add_message("user", "User B 메시지")
+        await session_a.add_message("user", "User A 메시지")
+        await session_b.add_message("user", "User B 메시지")
         
-        assert len(session_a.messages) == 1
-        assert len(session_b.messages) == 1
-        assert session_a.messages[0]["content"] == "User A 메시지"
-        assert session_b.messages[0]["content"] == "User B 메시지"
+        messages_a = await session_a.get_messages()
+        messages_b = await session_b.get_messages()
+        
+        assert len(messages_a) == 1
+        assert len(messages_b) == 1
+        assert messages_a[0]["content"] == "User A 메시지"
+        assert messages_b[0]["content"] == "User B 메시지"

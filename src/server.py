@@ -289,13 +289,15 @@ async def get_session_info(session_id: str):
     
     특정 세션의 정보를 조회합니다.
     """
-    session = _session_manager.get_session(session_id)
+    session = await _session_manager.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다")
     
+    message_count = await session.get_message_count()
+    
     return SessionInfoResponse(
         session_id=session.session_id,
-        message_count=len(session.messages),
+        message_count=message_count,
         created_at=session.created_at.isoformat(),
         last_accessed=session.last_accessed.isoformat()
     )
@@ -308,7 +310,7 @@ async def delete_session(session_id: str):
     
     특정 세션과 대화 히스토리를 삭제합니다.
     """
-    deleted = _session_manager.delete_session(session_id)
+    deleted = await _session_manager.delete_session(session_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다")
     
@@ -322,11 +324,8 @@ async def get_session_stats():
     
     현재 활성화된 세션 통계를 조회합니다.
     """
-    active_count = _session_manager.get_active_session_count()
-    total_messages = sum(
-        len(session.messages) 
-        for session in _session_manager.sessions.values()
-    )
+    active_count = await _session_manager.get_active_session_count()
+    total_messages = await _session_manager.get_total_message_count()
     
     return SessionStatsResponse(
         active_sessions=active_count,
@@ -384,12 +383,13 @@ async def process_request(request: AssistantRequest):
         # Get or create session if session_id provided
         conversation_history = None
         if request.session_id:
-            session = _session_manager.get_or_create_session(request.session_id)
+            session = await _session_manager.get_or_create_session(request.session_id)
             # Add user message to history
-            session.add_message("user", request.text)
+            await session.add_message("user", request.text)
             # Get conversation context for LLM
-            conversation_history = session.get_context_for_llm(limit=10)
-            logger.debug(f"Using session: {request.session_id} (history: {len(session.messages)} messages)")
+            conversation_history = await session.get_context_for_llm(limit=10)
+            message_count = await session.get_message_count()
+            logger.debug(f"Using session: {request.session_id} (history: {message_count} messages)")
         
         # Step 1: Parse request
         parsed = await parse_request(request.text)
@@ -426,7 +426,7 @@ async def process_request(request: AssistantRequest):
         
         # Add assistant response to session history
         if request.session_id:
-            session.add_message(
+            await session.add_message(
                 "assistant", 
                 final_response,
                 metadata={

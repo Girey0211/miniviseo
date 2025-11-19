@@ -217,6 +217,7 @@ python src/app.py
 - **CLI 모드**: 대화형 인터페이스
 - **API 서버 모드**: HTTP REST API 제공
 - **세션 기반 대화**: 클라이언트별 대화 히스토리 관리 (60분 유지)
+- **영구 저장소**: SQLite 기반 세션 및 메시지 저장 (Repository 패턴)
 
 ## Notion 통합 (필수)
 
@@ -309,7 +310,9 @@ ai-assistant/
 │  │     ├─ notion_calendar.py  # Notion 일정 관리
 │  │     └─ http_fetcher.py     # HTTP 요청 및 검색
 │  ├─ session/                  # 세션 관리
-│  │  └─ session_manager.py     # 대화 히스토리 관리
+│  │  ├─ session_manager.py     # 대화 히스토리 관리
+│  │  ├─ repository.py          # Repository 추상 인터페이스
+│  │  └─ sqlite_repository.py   # SQLite 구현체
 │  └─ utils/                    # 유틸리티
 │     └─ logger.py              # 로깅 설정
 ├─ tests/                       # 테스트 코드
@@ -331,7 +334,7 @@ ai-assistant/
 
 ## 테스트 현황
 
-- **총 166개 테스트 모두 통과** ✅
+- **총 178개 테스트 모두 통과** ✅
 - Parser 테스트: 13개
 - Agent 테스트: 33개
 - MCP Tools 테스트: 25개
@@ -340,6 +343,7 @@ ai-assistant/
 - E2E 통합 테스트: 18개
 - API 서버 테스트: 17개
 - 세션 관리 테스트: 20개
+- SQLite Repository 테스트: 12개
 - 워닝: 0개
 - 스킵: 0개
 
