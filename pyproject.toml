@@ -36,11 +36,8 @@ dev = [
 
 [project.scripts]
 ai-assistant = "src.app:main"
-assistant = "src.app:main"
-aia = "src.app:main"
+cli = "src.app:main"
 server = "src.server:main"
-ai = "src.app:main"
-viseo = "src.app:main"
 
 [tool.uv]
 package = true

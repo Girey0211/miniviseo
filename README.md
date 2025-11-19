@@ -15,7 +15,7 @@ uv sync
 # OPENAI_API_KEY=sk-proj-your-key-here
 
 # 4. 실행
-uv run ai
+uv run cli
 ```
 
 ## 설치 방법
@@ -65,7 +65,7 @@ NOTION_NOTES_DATABASE_ID=your_notes_database_id
 
 ```bash
 # 전체 명령어
-uv run ai-assistant
+uv run cli
 
 # Python 모듈로 실행
 uv run python src/app.py
@@ -74,18 +74,26 @@ uv run python src/app.py
 python -m src.app
 ```
 
-대화형 모드에서 사용 가능한 명령:
-- `/help` - 도움말 보기
-- `/debug` - 디버그 모드 토글 (로그 파일 경로 표시)
-- `/clear` - 대화 히스토리 초기화
+**시작 화면:**
+```
+┌─────────────────────────────────────────┐
+│ AI Personal Assistant                   │
+│ 자연어로 명령을 입력하세요. 도움말: /help │
+└─────────────────────────────────────────┘
+```
+
+**특수 명령:**
+- `/help` - 도움말 및 세션 정보 보기
 - `/history` - 대화 히스토리 보기 (최근 10개)
+- `/clear` - 대화 히스토리 초기화
+- `/debug` - 디버그 모드 토글 (로그 파일 경로 표시)
 - `/exit` - 종료
 
 **세션 관리:**
 - CLI 모드는 자동으로 세션을 생성하고 유지합니다
 - 세션 ID는 `~/.ai-assistant-session` 파일에 저장됩니다
 - 이전 대화 내용을 기억하여 문맥을 이해합니다
-- `/clear` 명령으로 대화 히스토리를 초기화할 수 있습니다
+- `/help` 명령으로 현재 세션 정보를 확인할 수 있습니다
 
 ### HTTP API 서버 모드
 

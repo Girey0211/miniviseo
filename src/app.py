@@ -231,14 +231,9 @@ async def main_loop():
     # Initialize app
     await initialize_app()
     
-    message_count = await _current_session.get_message_count()
-    session_info = f"세션: {_current_session.session_id} ({message_count}개 메시지)" if message_count > 0 else f"세션: {_current_session.session_id} (새 세션)"
-    
     console.print(Panel.fit(
         "[bold cyan]AI Personal Assistant[/bold cyan]\n"
-        "자연어로 명령을 입력하세요.\n"
-        f"[dim]{session_info}[/dim]\n"
-        "종료: /exit, 도움말: /help, 디버그: /debug, 히스토리 초기화: /clear",
+        "자연어로 명령을 입력하세요. 도움말: [bold]/help[/bold]",
         border_style="cyan"
     ))
     
@@ -258,20 +253,25 @@ async def main_loop():
                 console.print("[yellow]종료합니다.[/yellow]")
                 break
             elif user_input.strip() == "/help":
+                message_count = await _current_session.get_message_count()
+                session_info = f"세션: {_current_session.session_id} ({message_count}개 메시지)" if message_count > 0 else f"세션: {_current_session.session_id} (새 세션)"
+                
                 console.print(Panel(
-                    "[bold]사용 가능한 명령:[/bold]\n\n"
-                    "• 파일 관리: 'downloads 폴더 파일 보여줘'\n"
+                    f"[bold cyan]세션 정보[/bold cyan]\n"
+                    f"{session_info}\n\n"
+                    "[bold cyan]사용 가능한 명령[/bold cyan]\n\n"
+                    "[bold]자연어 요청:[/bold]\n"
                     "• 메모: '오늘 한 일 메모해줘: 프로젝트 완료'\n"
                     "• 일정: '오늘 오전 9시에 회의 추가해줘'\n"
                     "• 웹 검색: '파이썬 최신 뉴스 검색해줘'\n\n"
                     "[bold]특수 명령:[/bold]\n"
-                    "• /exit - 종료\n"
-                    "• /help - 도움말\n"
-                    "• /debug - 디버그 모드 토글\n"
-                    "• /clear - 대화 히스토리 초기화\n"
-                    "• /history - 대화 히스토리 보기",
-                    title="도움말",
-                    border_style="blue"
+                    "• [bold]/help[/bold] - 이 도움말 보기\n"
+                    "• [bold]/history[/bold] - 대화 히스토리 보기 (최근 10개)\n"
+                    "• [bold]/clear[/bold] - 대화 히스토리 초기화\n"
+                    "• [bold]/debug[/bold] - 디버그 모드 토글\n"
+                    "• [bold]/exit[/bold] - 종료",
+                    title="AI Personal Assistant - 도움말",
+                    border_style="cyan"
                 ))
                 continue
             elif user_input.strip() == "/clear":
