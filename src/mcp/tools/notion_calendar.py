@@ -245,6 +245,13 @@ async def add_event(title: str, date: str = "", time: str = "", description: str
             else:
                 notion_date = parsed_date
             
+            # Prepare headers for API calls
+            headers = {
+                "Authorization": f"Bearer {NOTION_API_KEY}",
+                "Notion-Version": "2022-06-28",
+                "Content-Type": "application/json"
+            }
+            
             # Get database schema to find the correct property names
             formatted_db_id = _format_database_id(NOTION_CALENDAR_DATABASE_ID)
             schema_url = f"https://api.notion.com/v1/databases/{formatted_db_id}"
@@ -302,14 +309,7 @@ async def add_event(title: str, date: str = "", time: str = "", description: str
                     ]
                 }
             
-            # Create page using direct HTTP request
-            headers = {
-                "Authorization": f"Bearer {NOTION_API_KEY}",
-                "Notion-Version": "2022-06-28",
-                "Content-Type": "application/json"
-            }
-            
-            formatted_db_id = _format_database_id(NOTION_CALENDAR_DATABASE_ID)
+            # Create page using direct HTTP request (headers already defined above)
             body = {
                 "parent": {"database_id": formatted_db_id},
                 "properties": properties
