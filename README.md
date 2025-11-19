@@ -86,8 +86,8 @@ python -m src.app
 
 세션 관리:
 - `/session` - 세션 목록 보기
-- `/session-select <번호>` - 세션 전환 (예: `/session-select 2`)
-- `/session-delete <번호>` - 세션 삭제 (예: `/session-delete 3`)
+- `/session-select <번호|ID>` - 세션 전환 (예: `/session-select 2` 또는 `/session-select cli-abc123`)
+- `/session-delete <번호|ID>` - 세션 삭제 (예: `/session-delete 3` 또는 `/session-delete cli-abc123`)
 
 기타:
 - `/help` - 도움말 및 세션 정보 보기
@@ -99,9 +99,9 @@ python -m src.app
 **세션 관리:**
 - CLI 실행 시 항상 새로운 세션이 생성됩니다
 - `/session` 명령으로 이전 세션 목록을 볼 수 있습니다
-- `/session-select <번호>` 명령으로 다른 세션으로 전환할 수 있습니다
+- `/session-select` 명령으로 다른 세션으로 전환할 수 있습니다 (번호 또는 세션 ID 사용)
 - 세션 전환 시 메시지가 없는 빈 세션은 자동으로 삭제됩니다
-- `/session-delete <번호>` 명령으로 세션을 삭제할 수 있습니다 (현재 세션 제외)
+- `/session-delete` 명령으로 세션을 삭제할 수 있습니다 (현재 세션 제외, 번호 또는 세션 ID 사용)
 - 각 세션은 독립적인 대화 히스토리를 유지합니다
 - 이전 대화 내용을 기억하여 문맥을 이해합니다
 
@@ -115,11 +115,17 @@ python -m src.app
 # 2. cli-def456 - 10개 메시지 - 2025-01-01 09:00
 # 3. cli-ghi789 - 0개 메시지 - 2025-01-01 08:00
 
-# 세션 2로 전환
+# 세션 2로 전환 (번호 사용)
 /session-select 2
 
-# 세션 3 삭제
+# 또는 세션 ID로 전환
+/session-select cli-def456
+
+# 세션 3 삭제 (번호 사용)
 /session-delete 3
+
+# 또는 세션 ID로 삭제
+/session-delete cli-ghi789
 ```
 
 ### HTTP API 서버 모드

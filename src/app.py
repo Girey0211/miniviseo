@@ -128,8 +128,8 @@ async def handle_session_list():
         console.print("[dim]세션 삭제: /session-delete <번호>[/dim]")
 
 
-async def handle_session_select(session_number: str):
-    """Handle /session-select command - switch to a session"""
+async def handle_session_select(session_identifier: str):
+    """Handle /session-select command - switch to a session by number or ID"""
     global _current_session
     
     cli_sessions = await get_cli_sessions()
@@ -138,61 +138,84 @@ async def handle_session_select(session_number: str):
         console.print("[yellow]저장된 세션이 없습니다.[/yellow]")
         return
     
+    new_session_id = None
+    
+    # Try to parse as number first
     try:
-        idx = int(session_number) - 1
+        idx = int(session_identifier) - 1
         if 0 <= idx < len(cli_sessions):
-            new_session = cli_sessions[idx]
-            new_session_id = new_session["session_id"]
-            
-            if new_session_id == _current_session.session_id:
-                console.print("[yellow]이미 현재 세션입니다.[/yellow]")
-                return
-            
-            # Check if current session has no messages, delete it
-            current_msg_count = await _current_session.get_message_count()
-            old_session_id = _current_session.session_id
-            
-            if current_msg_count == 0:
-                await _session_manager.delete_session(old_session_id)
-                logger.info(f"Deleted empty session: {old_session_id}")
-                console.print(f"[dim]빈 세션 {old_session_id} 삭제됨[/dim]")
-            
-            # Switch to new session
-            _current_session = await _session_manager.get_or_create_session(new_session_id)
-            msg_count = await _current_session.get_message_count()
-            console.print(f"[green]세션 전환: {new_session_id} ({msg_count}개 메시지)[/green]")
-            logger.info(f"Switched to session: {new_session_id}")
+            new_session_id = cli_sessions[idx]["session_id"]
         else:
             console.print(f"[red]잘못된 번호입니다. 1-{len(cli_sessions)} 사이의 숫자를 입력하세요.[/red]")
+            return
     except ValueError:
-        console.print("[red]잘못된 입력입니다. 숫자를 입력하세요.[/red]")
+        # Not a number, try as session ID
+        matching_sessions = [s for s in cli_sessions if s["session_id"] == session_identifier]
+        if matching_sessions:
+            new_session_id = matching_sessions[0]["session_id"]
+        else:
+            console.print(f"[red]세션 '{session_identifier}'을(를) 찾을 수 없습니다.[/red]")
+            console.print("[dim]힌트: /session 명령으로 사용 가능한 세션을 확인하세요.[/dim]")
+            return
+    
+    # Check if already current session
+    if new_session_id == _current_session.session_id:
+        console.print("[yellow]이미 현재 세션입니다.[/yellow]")
+        return
+    
+    # Check if current session has no messages, delete it
+    current_msg_count = await _current_session.get_message_count()
+    old_session_id = _current_session.session_id
+    
+    if current_msg_count == 0:
+        await _session_manager.delete_session(old_session_id)
+        logger.info(f"Deleted empty session: {old_session_id}")
+        console.print(f"[dim]빈 세션 {old_session_id} 삭제됨[/dim]")
+    
+    # Switch to new session
+    _current_session = await _session_manager.get_or_create_session(new_session_id)
+    msg_count = await _current_session.get_message_count()
+    console.print(f"[green]세션 전환: {new_session_id} ({msg_count}개 메시지)[/green]")
+    logger.info(f"Switched to session: {new_session_id}")
 
 
-async def handle_session_delete(session_number: str):
-    """Handle /session-delete command - delete a session"""
+async def handle_session_delete(session_identifier: str):
+    """Handle /session-delete command - delete a session by number or ID"""
     cli_sessions = await get_cli_sessions()
     
     if not cli_sessions:
         console.print("[yellow]저장된 세션이 없습니다.[/yellow]")
         return
     
+    session_id_to_delete = None
+    
+    # Try to parse as number first
     try:
-        idx = int(session_number) - 1
+        idx = int(session_identifier) - 1
         if 0 <= idx < len(cli_sessions):
-            session_to_delete = cli_sessions[idx]
-            session_id = session_to_delete["session_id"]
-            
-            if session_id == _current_session.session_id:
-                console.print("[red]현재 세션은 삭제할 수 없습니다.[/red]")
-                return
-            
-            await _session_manager.delete_session(session_id)
-            console.print(f"[green]세션 {session_id}이(가) 삭제되었습니다.[/green]")
-            logger.info(f"Deleted session: {session_id}")
+            session_id_to_delete = cli_sessions[idx]["session_id"]
         else:
             console.print(f"[red]잘못된 번호입니다. 1-{len(cli_sessions)} 사이의 숫자를 입력하세요.[/red]")
+            return
     except ValueError:
-        console.print("[red]잘못된 입력입니다. 숫자를 입력하세요.[/red]")
+        # Not a number, try as session ID
+        matching_sessions = [s for s in cli_sessions if s["session_id"] == session_identifier]
+        if matching_sessions:
+            session_id_to_delete = matching_sessions[0]["session_id"]
+        else:
+            console.print(f"[red]세션 '{session_identifier}'을(를) 찾을 수 없습니다.[/red]")
+            console.print("[dim]힌트: /session 명령으로 사용 가능한 세션을 확인하세요.[/dim]")
+            return
+    
+    # Check if trying to delete current session
+    if session_id_to_delete == _current_session.session_id:
+        console.print("[red]현재 세션은 삭제할 수 없습니다.[/red]")
+        return
+    
+    # Delete session
+    await _session_manager.delete_session(session_id_to_delete)
+    console.print(f"[green]세션 {session_id_to_delete}이(가) 삭제되었습니다.[/green]")
+    logger.info(f"Deleted session: {session_id_to_delete}")
 
 
 async def summarize_result(result: dict, parsed_request, conversation_history: list = None) -> str:
@@ -360,8 +383,8 @@ async def main_loop():
                     "• 웹 검색: '파이썬 최신 뉴스 검색해줘'\n\n"
                     "[bold]세션 관리:[/bold]\n"
                     "• [bold]/session[/bold] - 세션 목록 보기\n"
-                    "• [bold]/session-select <번호>[/bold] - 세션 전환\n"
-                    "• [bold]/session-delete <번호>[/bold] - 세션 삭제\n\n"
+                    "• [bold]/session-select <번호|ID>[/bold] - 세션 전환\n"
+                    "• [bold]/session-delete <번호|ID>[/bold] - 세션 삭제\n\n"
                     "[bold]기타 명령:[/bold]\n"
                     "• [bold]/help[/bold] - 이 도움말 보기\n"
                     "• [bold]/history[/bold] - 현재 세션의 대화 히스토리 보기\n"
@@ -380,14 +403,16 @@ async def main_loop():
                 if len(parts) == 2:
                     await handle_session_select(parts[1])
                 else:
-                    console.print("[red]사용법: /session-select <번호>[/red]")
+                    console.print("[red]사용법: /session-select <번호|세션ID>[/red]")
+                    console.print("[dim]예: /session-select 2 또는 /session-select cli-abc123[/dim]")
                 continue
             elif user_input.strip().startswith("/session-delete"):
                 parts = user_input.strip().split()
                 if len(parts) == 2:
                     await handle_session_delete(parts[1])
                 else:
-                    console.print("[red]사용법: /session-delete <번호>[/red]")
+                    console.print("[red]사용법: /session-delete <번호|세션ID>[/red]")
+                    console.print("[dim]예: /session-delete 3 또는 /session-delete cli-abc123[/dim]")
                 continue
             elif user_input.strip() == "/clear":
                 await _current_session.clear()
