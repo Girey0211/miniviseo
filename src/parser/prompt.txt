@@ -8,7 +8,8 @@ Return EXACTLY one JSON object with an "actions" array:
     {{
       "intent": "<one of: write_note, list_notes, calendar_list, calendar_add, web_search, unknown>",
       "agent": "<one of: NoteAgent, CalendarAgent, WebAgent, FallbackAgent>",
-      "params": {{"key":"value", ...}}
+      "params": {{"key":"value", ...}},
+      "use_results_from": [<list of action numbers (1-based) whose results should be used>]
     }},
     ...
   ]
@@ -36,26 +37,40 @@ IMPORTANT: Analyze the input and extract ALL distinct actions. Execute them in l
 2. Information gathering (WebAgent)
 3. Action execution (NoteAgent, CalendarAgent)
 
+use_results_from field:
+- Specify which previous actions' results should be used
+- Use 1-based indexing (action 1, action 2, etc.)
+- Empty array [] means no dependency on previous results
+- Example: [2] means use results from action 2
+
 Examples:
 
 Single action:
-- "메모 작성해줘" -> {{"actions": [{{"intent": "write_note", "agent": "NoteAgent", "params": {{"text": "메모 작성해줘"}}}}]}}
+- "메모 작성해줘" -> {{"actions": [{{"intent": "write_note", "agent": "NoteAgent", "params": {{"text": "메모 작성해줘"}}, "use_results_from": []}}]}}
 
-Multiple actions:
-- "안녕, 내일 3시에 밥을 먹을거라 부산역 주변 맛집 찾아서 일정 만들어" -> 
+Multiple actions with dependencies:
+- "토요일 7시에 저녁약속이 있음. 부산역 근처 맛집을 찾아서 일정을 만들어줘" -> 
 {{
   "actions": [
-    {{"intent": "unknown", "agent": "FallbackAgent", "params": {{"text": "안녕"}}}},
-    {{"intent": "web_search", "agent": "WebAgent", "params": {{"query": "부산역 주변 맛집"}}}},
-    {{"intent": "calendar_add", "agent": "CalendarAgent", "params": {{"text": "내일 3시에 밥약속"}}}}
+    {{"intent": "web_search", "agent": "WebAgent", "params": {{"query": "부산역 근처 맛집"}}, "use_results_from": []}},
+    {{"intent": "calendar_add", "agent": "CalendarAgent", "params": {{"text": "토요일 7시에 저녁약속"}}, "use_results_from": [1]}}
   ]
 }}
 
 - "파이썬 최신 뉴스 검색하고 메모해줘" ->
 {{
   "actions": [
-    {{"intent": "web_search", "agent": "WebAgent", "params": {{"query": "파이썬 최신 뉴스"}}}},
-    {{"intent": "write_note", "agent": "NoteAgent", "params": {{"text": "파이썬 최신 뉴스"}}}}
+    {{"intent": "web_search", "agent": "WebAgent", "params": {{"query": "파이썬 최신 뉴스"}}, "use_results_from": []}},
+    {{"intent": "write_note", "agent": "NoteAgent", "params": {{"text": "파이썬 최신 뉴스"}}, "use_results_from": [1]}}
+  ]
+}}
+
+- "안녕, 내일 3시에 밥을 먹을거라 부산역 주변 맛집 찾아서 일정 만들어" -> 
+{{
+  "actions": [
+    {{"intent": "unknown", "agent": "FallbackAgent", "params": {{"text": "안녕"}}, "use_results_from": []}},
+    {{"intent": "web_search", "agent": "WebAgent", "params": {{"query": "부산역 주변 맛집"}}, "use_results_from": []}},
+    {{"intent": "calendar_add", "agent": "CalendarAgent", "params": {{"text": "내일 3시에 밥약속"}}, "use_results_from": [2]}}
   ]
 }}
 

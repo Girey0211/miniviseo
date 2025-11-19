@@ -7,6 +7,7 @@ class AgentAction(BaseModel):
     intent: str
     agent: str
     params: Dict[str, Optional[str]] = {}
+    use_results_from: List[int] = []  # List of action indices to use results from (1-based)
 
 
 class ParsedRequest(BaseModel):

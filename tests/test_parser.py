@@ -205,11 +205,11 @@ class TestRequestParser:
 
     @pytest.mark.asyncio
     async def test_parse_multi_action_request(self, parser, mock_openai_response):
-        """Test parsing multi-action request"""
+        """Test parsing multi-action request with dependencies"""
         response_json = '''{"actions": [
-            {"intent": "unknown", "agent": "FallbackAgent", "params": {"text": "안녕"}},
-            {"intent": "web_search", "agent": "WebAgent", "params": {"query": "부산역 주변 맛집"}},
-            {"intent": "calendar_add", "agent": "CalendarAgent", "params": {"text": "내일 3시에 밥약속"}}
+            {"intent": "unknown", "agent": "FallbackAgent", "params": {"text": "안녕"}, "use_results_from": []},
+            {"intent": "web_search", "agent": "WebAgent", "params": {"query": "부산역 주변 맛집"}, "use_results_from": []},
+            {"intent": "calendar_add", "agent": "CalendarAgent", "params": {"text": "내일 3시에 밥약속"}, "use_results_from": [2]}
         ]}'''
         
         with patch.object(parser.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
@@ -221,10 +221,13 @@ class TestRequestParser:
             assert len(result.actions) == 3
             assert result.actions[0].intent == "unknown"
             assert result.actions[0].agent == "FallbackAgent"
+            assert result.actions[0].use_results_from == []
             assert result.actions[1].intent == "web_search"
             assert result.actions[1].agent == "WebAgent"
+            assert result.actions[1].use_results_from == []
             assert result.actions[2].intent == "calendar_add"
             assert result.actions[2].agent == "CalendarAgent"
+            assert result.actions[2].use_results_from == [2]
     
     @pytest.mark.asyncio
     async def test_parse_empty_actions_fallback(self, parser, mock_openai_response):

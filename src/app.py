@@ -386,7 +386,7 @@ async def run_once(text: str) -> str:
         previous_results = []  # Store results for context in later actions
         
         for idx, action in enumerate(parsed.actions, 1):
-            logger.debug(f"Action {idx}/{len(parsed.actions)} - Intent: {action.intent}, Agent: {action.agent}, Params: {action.params}")
+            logger.debug(f"Action {idx}/{len(parsed.actions)} - Intent: {action.intent}, Agent: {action.agent}, Params: {action.params}, Use results from: {action.use_results_from}")
             
             # Route to agent
             agent_class = route_to_agent(action)
@@ -411,11 +411,25 @@ async def run_once(text: str) -> str:
             
             logger.info(f"Action {idx}: Routing to agent: {agent.get_agent_name()}")
             
-            # Execute agent with intent and previous results as context
+            # Filter previous results based on use_results_from
+            filtered_results = []
+            if action.use_results_from:
+                for result_idx in action.use_results_from:
+                    # result_idx is 1-based, convert to 0-based for array access
+                    array_idx = result_idx - 1
+                    if 0 <= array_idx < len(previous_results):
+                        filtered_results.append(previous_results[array_idx])
+                        logger.debug(f"Action {idx}: Using results from action {result_idx}")
+                    else:
+                        logger.warning(f"Action {idx}: Invalid use_results_from index {result_idx}")
+            else:
+                logger.debug(f"Action {idx}: No previous results to use")
+            
+            # Execute agent with intent and filtered previous results
             params_with_context = {
                 **action.params,
                 "intent": action.intent,
-                "previous_results": previous_results  # Pass previous results for context
+                "previous_results": filtered_results  # Pass only specified results
             }
             
             result = await agent.handle(params_with_context)
