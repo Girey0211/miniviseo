@@ -312,6 +312,7 @@ python src/app.py
 - **OpenAI API 키 필수**: 유효한 API 키와 충분한 크레딧이 필요합니다
 - API 키가 없거나 quota가 초과된 경우 모든 요청이 `unknown` intent로 fallback됩니다
 - 테스트 실행 시 mock을 사용하므로 API 키 없이도 테스트 가능합니다
+- **한글 입력**: `prompt_toolkit`을 사용하여 한글 조합 문자 및 백스페이스 처리 개선
 
 ## 지원하는 기능
 

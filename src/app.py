@@ -9,11 +9,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from rich.console import Console
-from rich.prompt import Prompt
 from rich.panel import Panel
 from rich.spinner import Spinner
 from rich.live import Live
 from openai import AsyncOpenAI
+from prompt_toolkit import PromptSession
+from prompt_toolkit.styles import Style
 
 from parser.request_parser import parse_request
 from router.agent_router import route_to_agent, register_agent
@@ -509,11 +510,15 @@ async def main_loop():
     
     debug_mode = False
     
+    # Create prompt_toolkit session for better Korean input handling
+    prompt_session = PromptSession()
+    
     try:
         while True:
             try:
-                # Get user input
-                user_input = Prompt.ask("\n[bold green]You[/bold green]")
+                # Get user input using prompt_toolkit (better Korean support)
+                console.print("\n[bold green]You[/bold green]: ", end="")
+                user_input = await prompt_session.prompt_async("")
                 
                 if not user_input.strip():
                     continue
