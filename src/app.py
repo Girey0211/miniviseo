@@ -207,15 +207,26 @@ async def handle_session_delete(session_identifier: str):
             console.print("[dim]힌트: /session 명령으로 사용 가능한 세션을 확인하세요.[/dim]")
             return
     
+    global _current_session
+    
     # Check if trying to delete current session
     if session_id_to_delete == _current_session.session_id:
-        console.print("[red]현재 세션은 삭제할 수 없습니다.[/red]")
-        return
-    
-    # Delete session
-    await _session_manager.delete_session(session_id_to_delete)
-    console.print(f"[green]세션 {session_id_to_delete}이(가) 삭제되었습니다.[/green]")
-    logger.info(f"Deleted session: {session_id_to_delete}")
+        # Delete current session and create a new one
+        await _session_manager.delete_session(session_id_to_delete)
+        console.print(f"[yellow]현재 세션 {session_id_to_delete}이(가) 삭제되었습니다.[/yellow]")
+        logger.info(f"Deleted current session: {session_id_to_delete}")
+        
+        # Create new session
+        import uuid
+        new_session_id = f"cli-{uuid.uuid4().hex[:8]}"
+        _current_session = await _session_manager.get_or_create_session(new_session_id)
+        console.print(f"[green]새 세션 생성: {new_session_id}[/green]")
+        logger.info(f"Created new session: {new_session_id}")
+    else:
+        # Delete other session
+        await _session_manager.delete_session(session_id_to_delete)
+        console.print(f"[green]세션 {session_id_to_delete}이(가) 삭제되었습니다.[/green]")
+        logger.info(f"Deleted session: {session_id_to_delete}")
 
 
 async def summarize_result(result: dict, parsed_request, conversation_history: list = None) -> str:
