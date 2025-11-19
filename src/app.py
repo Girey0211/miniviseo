@@ -11,6 +11,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from rich.console import Console
 from rich.prompt import Prompt
 from rich.panel import Panel
+from rich.spinner import Spinner
+from rich.live import Live
 from openai import AsyncOpenAI
 
 from parser.request_parser import parse_request
@@ -224,8 +226,10 @@ async def main_loop():
                 logger.info(f"Debug mode toggled: {debug_mode}")
                 continue
             
-            # Process request
-            response = await run_once(user_input)
+            # Process request with spinner
+            with console.status("[cyan]처리 중...", spinner="line") as status:
+                response = await run_once(user_input)
+            
             console.print(f"[bold blue]Assistant[/bold blue]: {response}")
             
             # Show debug info if enabled
