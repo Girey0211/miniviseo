@@ -91,6 +91,10 @@ class NoteAgent(AgentBase):
                 if previous_results and not text:
                     # Extract content from previous results (e.g., web search results)
                     for prev in previous_results:
+                        # Skip FallbackAgent results (they contain debug info, not useful content)
+                        if prev.get("agent") == "FallbackAgent":
+                            continue
+                        
                         prev_result = prev.get("result", {})
                         if prev_result.get("status") == "ok":
                             prev_data = prev_result.get("result", "")
@@ -110,6 +114,9 @@ class NoteAgent(AgentBase):
                                             sources_text += f"- {source['title']}: {source['url']}\n"
                                         text += sources_text
                                     break
+                                # Skip debug info from FallbackAgent
+                                elif "params" in prev_data and "agent" in prev_data:
+                                    continue
                                 else:
                                     text = str(prev_data)
                                     break

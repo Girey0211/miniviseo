@@ -193,12 +193,22 @@ Rules:
                 # Add event - extract data from raw input using LLM
                 raw_text = params.get("text") or params.get("raw_text", "")
                 
+                # Debug: log params to identify the issue
+                from utils.logger import get_logger
+                logger = get_logger()
+                logger.debug(f"CalendarAgent params: {params}")
+                logger.debug(f"CalendarAgent raw_text type: {type(raw_text)}, value: {raw_text}")
+                
                 # Check if there are previous results to incorporate (e.g., web search results)
                 previous_results = params.get("previous_results", [])
                 additional_info = ""
                 
                 if previous_results:
                     for prev in previous_results:
+                        # Skip FallbackAgent results (they contain debug info, not useful content)
+                        if prev.get("agent") == "FallbackAgent":
+                            continue
+                        
                         prev_result = prev.get("result", {})
                         if prev_result.get("status") == "ok":
                             prev_data = prev_result.get("result", "")
@@ -218,6 +228,9 @@ Rules:
                                             sources_text += f"- {source['title']}: {source['url']}\n"
                                         additional_info += sources_text
                                     break
+                                # Skip debug info from FallbackAgent
+                                elif "params" in prev_data and "agent" in prev_data:
+                                    continue
                                 else:
                                     additional_info = str(prev_data)
                                     break
