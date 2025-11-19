@@ -68,8 +68,8 @@ class TestConversationHistory:
         assert len(messages) == 3
     
     @pytest.mark.asyncio
-    async def test_get_messages_with_limit(self):
-        """Test getting limited messages"""
+    async def test_get_messages_with_pagination(self):
+        """Test getting messages with pagination"""
         from session.sqlite_repository import SQLiteSessionRepository
         repo = SQLiteSessionRepository(db_path=":memory:")
         history = ConversationHistory("test-session", repo)
@@ -77,10 +77,17 @@ class TestConversationHistory:
         for i in range(10):
             await history.add_message("user", f"메시지 {i}")
         
-        recent = await history.get_messages(limit=3)
+        # Page 0 (most recent 3)
+        recent = await history.get_messages(page=0, page_size=3)
         assert len(recent) == 3
         assert recent[0]["content"] == "메시지 7"
         assert recent[-1]["content"] == "메시지 9"
+        
+        # Page 1 (next 3)
+        next_page = await history.get_messages(page=1, page_size=3)
+        assert len(next_page) == 3
+        assert next_page[0]["content"] == "메시지 4"
+        assert next_page[-1]["content"] == "메시지 6"
     
     @pytest.mark.asyncio
     async def test_get_context_for_llm(self):
@@ -109,8 +116,11 @@ class TestConversationHistory:
         for i in range(20):
             await history.add_message("user", f"메시지 {i}")
         
+        # Should get most recent 5 messages
         context = await history.get_context_for_llm(limit=5)
         assert len(context) == 5
+        assert context[0]["content"] == "메시지 15"
+        assert context[-1]["content"] == "메시지 19"
     
     @pytest.mark.asyncio
     async def test_clear_history(self):

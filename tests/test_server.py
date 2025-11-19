@@ -277,11 +277,11 @@ class TestServerSession:
             assert response.status_code == 404
     
     @pytest.mark.asyncio
-    async def test_get_session_info_with_limit(self):
-        """Test getting session info with message limit"""
+    async def test_get_session_info_with_pagination(self):
+        """Test getting session info with pagination"""
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            session_id = "test-session-limit"
+            session_id = "test-session-pagination"
             
             # Create session with multiple messages
             for i in range(5):
@@ -293,14 +293,21 @@ class TestServerSession:
                     }
                 )
             
-            # Get session info with limit
-            response = await client.get(f"/sessions/{session_id}?limit=3")
+            # Get session info with page 0 (most recent)
+            response = await client.get(f"/sessions/{session_id}?page=0&page_size=3")
             
             if response.status_code == 200:
                 data = response.json()
                 assert data["session_id"] == session_id
-                # Should return only last 3 messages
+                # Should return only 3 messages
                 assert len(data["messages"]) <= 3
+            
+            # Get session info with page 1 (next page)
+            response = await client.get(f"/sessions/{session_id}?page=1&page_size=3")
+            
+            if response.status_code == 200:
+                data = response.json()
+                assert data["session_id"] == session_id
     
     @pytest.mark.asyncio
     async def test_session_stats(self):

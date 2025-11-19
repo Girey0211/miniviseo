@@ -101,8 +101,8 @@ class TestSQLiteRepository:
         assert messages[1]["metadata"] == {"intent": "greeting"}
     
     @pytest.mark.asyncio
-    async def test_get_messages_with_limit(self):
-        """Test getting limited messages"""
+    async def test_get_messages_with_pagination(self):
+        """Test getting messages with pagination"""
         repo = SQLiteSessionRepository(db_path=":memory:")
         
         session_id = "test-session"
@@ -119,11 +119,23 @@ class TestSQLiteRepository:
                 timestamp=datetime.now()
             )
         
-        # Get last 3 messages
-        messages = await repo.get_messages(session_id, limit=3)
+        # Get page 0 (most recent 3 messages)
+        messages = await repo.get_messages(session_id, page=0, page_size=3)
         assert len(messages) == 3
         assert messages[0]["content"] == "Message 7"
         assert messages[-1]["content"] == "Message 9"
+        
+        # Get page 1 (next 3 messages)
+        messages = await repo.get_messages(session_id, page=1, page_size=3)
+        assert len(messages) == 3
+        assert messages[0]["content"] == "Message 4"
+        assert messages[-1]["content"] == "Message 6"
+        
+        # Get page 2 (next 3 messages)
+        messages = await repo.get_messages(session_id, page=2, page_size=3)
+        assert len(messages) == 3
+        assert messages[0]["content"] == "Message 1"
+        assert messages[-1]["content"] == "Message 3"
     
     @pytest.mark.asyncio
     async def test_delete_messages(self):

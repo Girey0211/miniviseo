@@ -287,36 +287,36 @@ class SQLiteSessionRepository(SessionRepository):
     async def get_messages(
         self, 
         session_id: str, 
-        limit: Optional[int] = None
+        page: int = 0,
+        page_size: int = 10
     ) -> List[Dict]:
-        """Get messages for a session"""
+        """Get messages for a session with pagination
+        
+        Args:
+            session_id: Session ID
+            page: Page number (0-based, 0 = most recent)
+            page_size: Number of messages per page
+        """
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
             
+            offset = page * page_size
+            
+            # Get messages with pagination (most recent first, then reverse)
             query = """
                 SELECT role, content, timestamp, metadata
-                FROM messages
-                WHERE session_id = ?
+                FROM (
+                    SELECT role, content, timestamp, metadata
+                    FROM messages
+                    WHERE session_id = ?
+                    ORDER BY timestamp DESC
+                    LIMIT ? OFFSET ?
+                )
                 ORDER BY timestamp ASC
             """
             
-            if limit:
-                # Get last N messages
-                query = f"""
-                    SELECT role, content, timestamp, metadata
-                    FROM (
-                        SELECT role, content, timestamp, metadata
-                        FROM messages
-                        WHERE session_id = ?
-                        ORDER BY timestamp DESC
-                        LIMIT ?
-                    )
-                    ORDER BY timestamp ASC
-                """
-                cursor.execute(query, (session_id, limit))
-            else:
-                cursor.execute(query, (session_id,))
+            cursor.execute(query, (session_id, page_size, offset))
             
             rows = cursor.fetchall()
             self._close_connection(conn)

@@ -143,8 +143,8 @@ Content-Type: application/json
 
 **세션 관리**
 ```bash
-# 세션 정보 조회
-GET /sessions/{session_id}
+# 세션 정보 조회 (페이지네이션)
+GET /sessions/{session_id}?page=0&page_size=10
 
 # 세션 삭제
 DELETE /sessions/{session_id}
@@ -152,6 +152,10 @@ DELETE /sessions/{session_id}
 # 세션 통계
 GET /sessions-stats
 ```
+
+**페이지네이션 파라미터**
+- `page`: 페이지 번호 (0부터 시작, 0 = 최신 메시지)
+- `page_size`: 페이지당 메시지 수 (기본값: 10, 최대: 50)
 
 #### cURL 예시
 
@@ -173,8 +177,14 @@ curl -X POST http://localhost:8000/assistant \
   -H "Content-Type: application/json" \
   -d '{"text": "메모 작성해줘: 프로젝트 완료", "session_id": "user-123"}'
 
-# 세션 정보 조회
+# 세션 정보 조회 (최신 10개)
 curl http://localhost:8000/sessions/user-123
+
+# 세션 정보 조회 (page 1, 그 다음 10개)
+curl http://localhost:8000/sessions/user-123?page=1
+
+# 세션 정보 조회 (page 0, 최신 20개)
+curl "http://localhost:8000/sessions/user-123?page=0&page_size=20"
 
 # 세션 삭제
 curl -X DELETE http://localhost:8000/sessions/user-123

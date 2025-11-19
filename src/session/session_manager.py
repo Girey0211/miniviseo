@@ -51,14 +51,19 @@ class ConversationHistory:
         
         logger.debug(f"Session {self.session_id}: Added {role} message")
     
-    async def get_messages(self, limit: Optional[int] = None) -> List[Dict]:
-        """Get conversation messages"""
-        messages = await self.repository.get_messages(self.session_id, limit=limit)
+    async def get_messages(self, page: int = 0, page_size: int = 10) -> List[Dict]:
+        """Get conversation messages with pagination
+        
+        Args:
+            page: Page number (0-based, 0 = most recent)
+            page_size: Number of messages per page
+        """
+        messages = await self.repository.get_messages(self.session_id, page=page, page_size=page_size)
         return messages
     
     async def get_context_for_llm(self, limit: int = 10) -> List[Dict]:
         """Get recent messages formatted for LLM context"""
-        messages = await self.get_messages(limit=limit)
+        messages = await self.get_messages(page=0, page_size=limit)
         return [
             {"role": msg["role"], "content": msg["content"]}
             for msg in messages

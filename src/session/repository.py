@@ -51,9 +51,16 @@ class SessionRepository(ABC):
     async def get_messages(
         self, 
         session_id: str, 
-        limit: Optional[int] = None
+        page: int = 0,
+        page_size: int = 10
     ) -> List[Dict]:
-        """Get messages for a session"""
+        """Get messages for a session with pagination
+        
+        Args:
+            session_id: Session ID
+            page: Page number (0-based, 0 = most recent)
+            page_size: Number of messages per page
+        """
         pass
     
     @abstractmethod

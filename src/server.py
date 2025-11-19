@@ -146,14 +146,16 @@ app = FastAPI(
     
     ### 세션 관리 API
     - `GET /sessions/{session_id}` - 세션 정보 및 대화 히스토리 조회
-      - `?limit=N` 파라미터로 메시지 수 제한 (기본 50, 최대 100)
+      - `?page=N` 파라미터로 페이지 지정 (0부터 시작, 0 = 최신)
+      - `?page_size=N` 파라미터로 페이지당 메시지 수 (기본 10, 최대 50)
     - `DELETE /sessions/{session_id}` - 세션 삭제
     - `GET /sessions-stats` - 전체 세션 통계
     
     ### 대화 히스토리 조회 예시
     ```
-    GET /sessions/user-123
-    GET /sessions/user-123?limit=20
+    GET /sessions/user-123                    # 최신 10개
+    GET /sessions/user-123?page=1             # 그 다음 10개
+    GET /sessions/user-123?page=0&page_size=20  # 최신 20개
     ```
     
     **응답 예시:**
@@ -294,10 +296,10 @@ class SessionInfoResponse(BaseModel):
     
     Attributes:
         session_id: 세션 ID
-        message_count: 세션에 저장된 메시지 수
+        message_count: 세션에 저장된 총 메시지 수
         created_at: 세션 생성 시각 (ISO 8601 형식)
         last_accessed: 마지막 접근 시각 (ISO 8601 형식)
-        messages: 대화 히스토리 (최근 50개)
+        messages: 대화 히스토리 (페이지 단위)
     """
     session_id: str
     message_count: int
@@ -429,37 +431,41 @@ async def health():
 
 
 @app.get("/sessions/{session_id}", response_model=SessionInfoResponse, tags=["Session"])
-async def get_session_info(session_id: str, limit: int = 50):
+async def get_session_info(session_id: str, page: int = 0, page_size: int = 10):
     """
     세션 정보 및 대화 히스토리 조회
     
-    특정 세션의 정보와 대화 히스토리를 조회합니다.
+    특정 세션의 정보와 대화 히스토리를 페이지 단위로 조회합니다.
     
     **Parameters:**
     - **session_id**: 조회할 세션 ID
-    - **limit**: 조회할 메시지 수 (기본값: 50, 최대: 100)
+    - **page**: 페이지 번호 (0부터 시작, 0 = 최신 메시지)
+    - **page_size**: 페이지당 메시지 수 (기본값: 10, 최대: 50)
     
     **Returns:**
     - 세션 ID, 메시지 수, 생성 시각, 마지막 접근 시각, 대화 히스토리
     
     **Example:**
     ```
-    GET /sessions/user-123
-    GET /sessions/user-123?limit=20
+    GET /sessions/user-123              # 최신 10개
+    GET /sessions/user-123?page=1       # 그 다음 10개
+    GET /sessions/user-123?page=0&page_size=20  # 최신 20개
     ```
     """
     session = await _session_manager.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다")
     
-    # Limit validation
-    if limit > 100:
-        limit = 100
-    elif limit < 1:
-        limit = 1
+    # Validation
+    if page < 0:
+        page = 0
+    if page_size > 50:
+        page_size = 50
+    elif page_size < 1:
+        page_size = 1
     
     message_count = await session.get_message_count()
-    messages = await session.get_messages(limit=limit)
+    messages = await session.get_messages(page=page, page_size=page_size)
     
     # Convert messages to MessageInfo format
     message_infos = [
