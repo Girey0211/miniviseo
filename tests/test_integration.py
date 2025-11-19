@@ -12,9 +12,9 @@ from app import initialize_app, run_once
 
 
 @pytest.fixture(scope="module")
-def setup_app():
+async def setup_app():
     """Initialize app once for all tests"""
-    initialize_app()
+    await initialize_app()
 
 
 @pytest.mark.asyncio

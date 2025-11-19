@@ -20,6 +20,7 @@ from router.agent_router import route_to_agent, register_agent
 from mcp.client import get_mcp_client, register_tool
 from config import OPENAI_API_KEY, OPENAI_MODEL, LOG_FILE
 from utils.logger import get_logger, set_console_level
+from session import get_session_manager
 
 logger = get_logger()
 
@@ -38,13 +39,36 @@ console = Console()
 _mcp_client = None
 _llm_client = None
 _agent_instances = {}
+_session_manager = None
+_current_session = None
 
 
-def initialize_app():
-    """Initialize MCP client, LLM client, and register agents/tools"""
-    global _mcp_client, _llm_client, _agent_instances
+async def initialize_app():
+    """Initialize MCP client, LLM client, session manager, and register agents/tools"""
+    global _mcp_client, _llm_client, _agent_instances, _session_manager, _current_session
     
     logger.info("Initializing AI Personal Assistant...")
+    
+    # Initialize session manager
+    _session_manager = get_session_manager()
+    logger.debug("Session manager initialized")
+    
+    # Create or restore CLI session
+    import uuid
+    import os
+    session_file = Path.home() / ".ai-assistant-session"
+    
+    if session_file.exists():
+        session_id = session_file.read_text().strip()
+        logger.debug(f"Restoring session: {session_id}")
+    else:
+        session_id = f"cli-{uuid.uuid4().hex[:8]}"
+        session_file.write_text(session_id)
+        logger.debug(f"Created new session: {session_id}")
+    
+    _current_session = await _session_manager.get_or_create_session(session_id)
+    message_count = await _current_session.get_message_count()
+    logger.info(f"Session loaded: {session_id} ({message_count} messages)")
     
     # Initialize MCP client
     _mcp_client = get_mcp_client()
@@ -77,13 +101,14 @@ def initialize_app():
     logger.info("Initialization complete")
 
 
-async def summarize_result(result: dict, parsed_request) -> str:
+async def summarize_result(result: dict, parsed_request, conversation_history: list = None) -> str:
     """
     Generate natural language response from agent result using LLM
     
     Args:
         result: Result dictionary from agent
         parsed_request: Original parsed request
+        conversation_history: Previous conversation messages for context
         
     Returns:
         Natural language response string
@@ -102,12 +127,21 @@ Intent: {parsed_request.intent}
 - 친근한 톤 사용"""
 
     try:
+        # Build messages with conversation history
+        messages = [
+            {"role": "system", "content": "당신은 친절한 AI 개인 비서입니다. 사용자에게 간결하고 명확한 한국어로 응답합니다."}
+        ]
+        
+        # Add conversation history if available
+        if conversation_history:
+            messages.extend(conversation_history)
+        
+        # Add current prompt
+        messages.append({"role": "user", "content": prompt})
+        
         response = await _llm_client.chat.completions.create(
             model=OPENAI_MODEL,
-            messages=[
-                {"role": "system", "content": "당신은 친절한 AI 개인 비서입니다. 사용자에게 간결하고 명확한 한국어로 응답합니다."},
-                {"role": "user", "content": prompt}
-            ],
+            messages=messages,
             temperature=0.7,
             max_tokens=500
         )
@@ -116,12 +150,13 @@ Intent: {parsed_request.intent}
         
     except Exception as e:
         # Fallback to simple response if LLM fails
+        logger.error(f"Error in summarize_result: {str(e)}")
         return f"작업이 완료되었습니다. 결과: {result.get('result')}"
 
 
 async def run_once(text: str) -> str:
     """
-    Process a single user request
+    Process a single user request with conversation history
     
     Args:
         text: User input text
@@ -132,6 +167,12 @@ async def run_once(text: str) -> str:
     try:
         logger.info(f"Processing request: {text}")
         
+        # Add user message to session
+        await _current_session.add_message("user", text)
+        
+        # Get conversation context for LLM
+        conversation_history = await _current_session.get_context_for_llm(limit=10)
+        
         # Step 1: Parse request
         parsed = await parse_request(text)
         logger.debug(f"Parsed request - Intent: {parsed.intent}, Agent: {parsed.agent}, Params: {parsed.params}")
@@ -141,7 +182,9 @@ async def run_once(text: str) -> str:
         
         if agent_class is None:
             logger.warning("No agent found for request")
-            return "죄송합니다. 요청을 처리할 수 없습니다."
+            response = "죄송합니다. 요청을 처리할 수 없습니다."
+            await _current_session.add_message("assistant", response)
+            return response
         
         # Get agent instance
         agent = _agent_instances.get(parsed.agent)
@@ -159,26 +202,43 @@ async def run_once(text: str) -> str:
         result = await agent.handle(params_with_intent)
         logger.debug(f"Agent result: {result.get('status')} - {result.get('message', '')}")
         
-        # Step 4: Generate natural language response
-        final_response = await summarize_result(result, parsed)
+        # Step 4: Generate natural language response with conversation history
+        final_response = await summarize_result(result, parsed, conversation_history)
         logger.info("Request processed successfully")
+        
+        # Add assistant response to session
+        await _current_session.add_message(
+            "assistant",
+            final_response,
+            metadata={
+                "intent": parsed.intent,
+                "agent": parsed.agent,
+                "status": result.get("status", "ok")
+            }
+        )
         
         return final_response
         
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}", exc_info=True)
-        return f"오류가 발생했습니다: {str(e)}"
+        error_response = f"오류가 발생했습니다: {str(e)}"
+        await _current_session.add_message("assistant", error_response)
+        return error_response
 
 
 async def main_loop():
     """Main interactive loop"""
     # Initialize app
-    initialize_app()
+    await initialize_app()
+    
+    message_count = await _current_session.get_message_count()
+    session_info = f"세션: {_current_session.session_id} ({message_count}개 메시지)" if message_count > 0 else f"세션: {_current_session.session_id} (새 세션)"
     
     console.print(Panel.fit(
         "[bold cyan]AI Personal Assistant[/bold cyan]\n"
         "자연어로 명령을 입력하세요.\n"
-        "종료: /exit, 도움말: /help, 디버그: /debug",
+        f"[dim]{session_info}[/dim]\n"
+        "종료: /exit, 도움말: /help, 디버그: /debug, 히스토리 초기화: /clear",
         border_style="cyan"
     ))
     
@@ -207,10 +267,31 @@ async def main_loop():
                     "[bold]특수 명령:[/bold]\n"
                     "• /exit - 종료\n"
                     "• /help - 도움말\n"
-                    "• /debug - 디버그 모드 토글",
+                    "• /debug - 디버그 모드 토글\n"
+                    "• /clear - 대화 히스토리 초기화\n"
+                    "• /history - 대화 히스토리 보기",
                     title="도움말",
                     border_style="blue"
                 ))
+                continue
+            elif user_input.strip() == "/clear":
+                await _current_session.clear()
+                console.print("[yellow]대화 히스토리가 초기화되었습니다.[/yellow]")
+                logger.info("Conversation history cleared")
+                continue
+            elif user_input.strip() == "/history":
+                messages = await _current_session.get_messages(page=0, page_size=20)
+                if not messages:
+                    console.print("[yellow]대화 히스토리가 없습니다.[/yellow]")
+                else:
+                    console.print(Panel(
+                        "\n".join([
+                            f"[{'green' if msg['role'] == 'user' else 'blue'}]{msg['role']}[/]: {msg['content'][:100]}{'...' if len(msg['content']) > 100 else ''}"
+                            for msg in messages[-10:]  # Show last 10 messages
+                        ]),
+                        title=f"대화 히스토리 (최근 10개, 전체 {len(messages)}개)",
+                        border_style="blue"
+                    ))
                 continue
             elif user_input.strip() == "/debug":
                 debug_mode = not debug_mode
