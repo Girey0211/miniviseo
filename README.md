@@ -109,7 +109,7 @@ uv run uvicorn src.server:app --reload
 GET /health
 ```
 
-**요청 처리**
+**요청 처리 (세션 없이)**
 ```bash
 POST /assistant
 Content-Type: application/json
@@ -119,14 +119,38 @@ Content-Type: application/json
 }
 ```
 
+**요청 처리 (세션 기반 대화)**
+```bash
+POST /assistant
+Content-Type: application/json
+
+{
+  "text": "오늘 한 일 메모해줘: 프로젝트 완료",
+  "session_id": "user-123-session"
+}
+```
+
 **응답 예시**
 ```json
 {
   "response": "메모를 작성했습니다.",
   "intent": "write_note",
   "agent": "NoteAgent",
-  "status": "ok"
+  "status": "ok",
+  "session_id": "user-123-session"
 }
+```
+
+**세션 관리**
+```bash
+# 세션 정보 조회
+GET /sessions/{session_id}
+
+# 세션 삭제
+DELETE /sessions/{session_id}
+
+# 세션 통계
+GET /sessions-stats
 ```
 
 #### cURL 예시
@@ -135,10 +159,28 @@ Content-Type: application/json
 # Health check
 curl http://localhost:8000/health
 
-# 메모 작성
+# 메모 작성 (세션 없이)
 curl -X POST http://localhost:8000/assistant \
   -H "Content-Type: application/json" \
   -d '{"text": "메모 작성해줘: 테스트 메모"}'
+
+# 세션 기반 대화
+curl -X POST http://localhost:8000/assistant \
+  -H "Content-Type: application/json" \
+  -d '{"text": "안녕하세요", "session_id": "user-123"}'
+
+curl -X POST http://localhost:8000/assistant \
+  -H "Content-Type: application/json" \
+  -d '{"text": "메모 작성해줘: 프로젝트 완료", "session_id": "user-123"}'
+
+# 세션 정보 조회
+curl http://localhost:8000/sessions/user-123
+
+# 세션 삭제
+curl -X DELETE http://localhost:8000/sessions/user-123
+
+# 세션 통계
+curl http://localhost:8000/sessions-stats
 
 # 웹 검색
 curl -X POST http://localhost:8000/assistant \
@@ -174,6 +216,7 @@ python src/app.py
 - **웹 검색**: 검색 결과 자동 수집 및 LLM 요약
 - **CLI 모드**: 대화형 인터페이스
 - **API 서버 모드**: HTTP REST API 제공
+- **세션 기반 대화**: 클라이언트별 대화 히스토리 관리 (60분 유지)
 
 ## Notion 통합 (필수)
 
@@ -265,6 +308,8 @@ ai-assistant/
 │  │     ├─ notion_notes.py     # Notion 메모 관리
 │  │     ├─ notion_calendar.py  # Notion 일정 관리
 │  │     └─ http_fetcher.py     # HTTP 요청 및 검색
+│  ├─ session/                  # 세션 관리
+│  │  └─ session_manager.py     # 대화 히스토리 관리
 │  └─ utils/                    # 유틸리티
 │     └─ logger.py              # 로깅 설정
 ├─ tests/                       # 테스트 코드
@@ -286,14 +331,15 @@ ai-assistant/
 
 ## 테스트 현황
 
-- **총 138개 테스트 모두 통과** ✅
+- **총 166개 테스트 모두 통과** ✅
 - Parser 테스트: 13개
 - Agent 테스트: 33개
 - MCP Tools 테스트: 25개
 - Router 테스트: 23개
-- Notion 통합 테스트: 5개
+- Notion 통합 테스트: 13개
 - E2E 통합 테스트: 18개
-- API 서버 테스트: 9개
+- API 서버 테스트: 17개
+- 세션 관리 테스트: 20개
 - 워닝: 0개
 - 스킵: 0개
 
