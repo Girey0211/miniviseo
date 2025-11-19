@@ -63,7 +63,7 @@ def initialize_app():
     _agent_instances = {
         "NoteAgent": NoteAgent(mcp_client=_mcp_client, llm_client=_llm_client),
         "CalendarAgent": CalendarAgent(mcp_client=_mcp_client, llm_client=_llm_client),
-        "WebAgent": WebAgent(mcp_client=_mcp_client, llm_client=_llm_client),
+        "WebAgent": WebAgent(mcp_client=_mcp_client),
         "FallbackAgent": FallbackAgent(mcp_client=_mcp_client, llm_client=_llm_client),
     }
     

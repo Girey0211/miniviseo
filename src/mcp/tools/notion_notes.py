@@ -83,15 +83,8 @@ async def write(text: str, title: str = "") -> Dict[str, Any]:
                 }
             }
             
-            # Add content as tags if available (since database uses 태그 instead of 내용)
-            if text and text != note_title:
-                # Use first 100 chars of content as a tag
-                content_preview = text[:100]
-                properties["태그"] = {  # Korean: Tags
-                    "multi_select": [
-                        {"name": content_preview}
-                    ]
-                }
+            # Don't add content to tags - tags have strict limitations
+            # Content will be added to page body instead
             
             # Create page using direct HTTP request
             headers = {
@@ -105,6 +98,31 @@ async def write(text: str, title: str = "") -> Dict[str, Any]:
                 "parent": {"database_id": formatted_db_id},
                 "properties": properties
             }
+            
+            # Add content as page body (children blocks) if different from title
+            if text and text != note_title:
+                # Split content into paragraphs and create blocks
+                paragraphs = text.split('\n')
+                children = []
+                for para in paragraphs:
+                    if para.strip():  # Skip empty lines
+                        children.append({
+                            "object": "block",
+                            "type": "paragraph",
+                            "paragraph": {
+                                "rich_text": [
+                                    {
+                                        "type": "text",
+                                        "text": {
+                                            "content": para[:2000]  # Notion limit per block
+                                        }
+                                    }
+                                ]
+                            }
+                        })
+                
+                if children:
+                    body["children"] = children
             
             url = "https://api.notion.com/v1/pages"
             

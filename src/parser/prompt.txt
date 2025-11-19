@@ -16,11 +16,22 @@ Intent to Agent mapping:
 - web_search -> WebAgent
 - unknown -> FallbackAgent
 
+Korean keyword mapping (한국어 키워드 매핑):
+- "메모", "노트", "기록" -> NoteAgent (write_note or list_notes)
+- "일정", "캘린더", "스케줄" -> CalendarAgent
+- "검색", "찾아", "웹" -> WebAgent
+
 Parameter extraction rules:
 - For file operations: extract "path" from folder/directory names
-- For notes: extract "text" or "content"
-- For calendar: extract "date", "time", "title", "description"
+- For notes: extract "text" or "content" from the input
+- For calendar: pass the entire input as "text" (agent will process with LLM)
 - For web: extract "query" or "url"
+
+Examples:
+- "메모 작성해줘" -> {{"intent": "write_note", "agent": "NoteAgent", "params": {{"text": "메모 작성해줘"}}}}
+- "메모 목록 보여줘" -> {{"intent": "list_notes", "agent": "NoteAgent", "params": {{}}}}
+- "오늘 오후 3시에 회의" -> {{"intent": "calendar_add", "agent": "CalendarAgent", "params": {{"text": "오늘 오후 3시에 회의"}}}}
+- "이번주 일정 알려줘" -> {{"intent": "calendar_list", "agent": "CalendarAgent", "params": {{"text": "이번주 일정 알려줘"}}}}
 
 If the intent is unclear or doesn't match any category, use intent="unknown" and agent="FallbackAgent".
 

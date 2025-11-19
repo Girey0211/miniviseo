@@ -117,6 +117,58 @@ class TestRequestParser:
             assert result.agent == "NoteAgent"
     
     @pytest.mark.asyncio
+    async def test_parse_korean_memo_keyword(self, parser, mock_openai_response):
+        """Test parsing Korean '메모' keyword to NoteAgent"""
+        response_json = '{"intent": "write_note", "agent": "NoteAgent", "params": {"text": "테스트 메모"}}'
+        
+        with patch.object(parser.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = mock_openai_response(response_json)
+            
+            result = await parser.parse_request("메모 작성해줘: 테스트 메모")
+            
+            assert result.intent == "write_note"
+            assert result.agent == "NoteAgent"
+    
+    @pytest.mark.asyncio
+    async def test_parse_korean_memo_list_keyword(self, parser, mock_openai_response):
+        """Test parsing Korean '메모 목록' keyword to NoteAgent"""
+        response_json = '{"intent": "list_notes", "agent": "NoteAgent", "params": {}}'
+        
+        with patch.object(parser.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = mock_openai_response(response_json)
+            
+            result = await parser.parse_request("메모 목록 보여줘")
+            
+            assert result.intent == "list_notes"
+            assert result.agent == "NoteAgent"
+    
+    @pytest.mark.asyncio
+    async def test_parse_korean_note_keyword(self, parser, mock_openai_response):
+        """Test parsing Korean '노트' keyword to NoteAgent"""
+        response_json = '{"intent": "write_note", "agent": "NoteAgent", "params": {"text": "노트 내용"}}'
+        
+        with patch.object(parser.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = mock_openai_response(response_json)
+            
+            result = await parser.parse_request("노트에 기록해줘")
+            
+            assert result.intent == "write_note"
+            assert result.agent == "NoteAgent"
+    
+    @pytest.mark.asyncio
+    async def test_parse_korean_record_keyword(self, parser, mock_openai_response):
+        """Test parsing Korean '기록' keyword to NoteAgent"""
+        response_json = '{"intent": "write_note", "agent": "NoteAgent", "params": {"text": "기록 내용"}}'
+        
+        with patch.object(parser.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = mock_openai_response(response_json)
+            
+            result = await parser.parse_request("기록 남겨줘")
+            
+            assert result.intent == "write_note"
+            assert result.agent == "NoteAgent"
+    
+    @pytest.mark.asyncio
     async def test_parse_calendar_list_request(self, parser, mock_openai_response):
         """Test parsing calendar list request"""
         response_json = '{"intent": "calendar_list", "agent": "CalendarAgent", "params": {}}'

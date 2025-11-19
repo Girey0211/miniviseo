@@ -193,3 +193,42 @@ class TestHttpFetcher:
         
         if result["status"] == "ok":
             assert "truncated" in result["result"]
+    
+    @pytest.mark.asyncio
+    async def test_search_success(self):
+        """Test web search functionality"""
+        from mcp.tools import http_fetcher
+        
+        result = await http_fetcher.search("Python programming", max_results=3)
+        
+        assert result["status"] == "ok"
+        assert isinstance(result["result"], list)
+        assert len(result["result"]) <= 3
+        
+        if len(result["result"]) > 0:
+            first_result = result["result"][0]
+            assert "title" in first_result
+            assert "url" in first_result
+            assert "snippet" in first_result
+    
+    @pytest.mark.asyncio
+    async def test_fetch_and_extract_success(self):
+        """Test fetching and extracting text from URL"""
+        from mcp.tools import http_fetcher
+        
+        result = await http_fetcher.fetch_and_extract("https://httpbin.org/html")
+        
+        assert result["status"] == "ok"
+        assert "text" in result["result"]
+        assert "url" in result["result"]
+        assert result["result"]["url"] == "https://httpbin.org/html"
+    
+    @pytest.mark.asyncio
+    async def test_fetch_and_extract_with_max_length(self):
+        """Test text extraction respects max_length"""
+        from mcp.tools import http_fetcher
+        
+        result = await http_fetcher.fetch_and_extract("https://httpbin.org/html", max_length=100)
+        
+        if result["status"] == "ok":
+            assert len(result["result"]["text"]) <= 100

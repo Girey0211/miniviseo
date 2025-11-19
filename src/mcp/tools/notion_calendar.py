@@ -238,9 +238,10 @@ async def add_event(title: str, date: str = "", time: str = "", description: str
             # Parse date
             parsed_date = _parse_relative_date(date)
             
-            # Combine date and time for Notion
+            # Combine date and time for Notion with KST timezone
             if time:
-                notion_date = f"{parsed_date}T{time}:00"
+                # Add KST timezone offset (+09:00) to prevent UTC conversion
+                notion_date = f"{parsed_date}T{time}:00+09:00"
             else:
                 notion_date = parsed_date
             
@@ -292,10 +293,13 @@ async def add_event(title: str, date: str = "", time: str = "", description: str
         
         response = await asyncio.to_thread(_create_notion_page)
         
+        # Parse date for response
+        final_date = _parse_relative_date(date) if date else ""
+        
         event = {
             "id": response["id"],
             "title": title,
-            "date": parsed_date,
+            "date": final_date,
             "time": time,
             "description": description,
             "url": response.get("url", ""),

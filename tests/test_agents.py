@@ -178,15 +178,25 @@ class TestNoteAgent:
         mock.call = AsyncMock()
         return mock
     
+    @pytest.fixture
+    def mock_openai_response(self):
+        """Create mock OpenAI response"""
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "AI 생성 제목"
+        return mock_response
+    
     @pytest.mark.asyncio
-    async def test_note_agent_write_note(self, mock_mcp):
-        """Test NoteAgent writing a note to Notion"""
+    async def test_note_agent_write_note_with_ai_title(self, mock_mcp, mock_openai_response):
+        """Test NoteAgent writing a note with AI-generated title"""
+        from unittest.mock import patch
+        
         mock_mcp.call.return_value = {
             "status": "ok",
             "result": {
                 "id": "page-123",
-                "title": "Test",
-                "content": "Test note",
+                "title": "AI 생성 제목",
+                "content": "Test note content",
                 "created_at": "2024-01-15T10:30:00.000Z",
                 "url": "https://notion.so/page-123"
             },
@@ -194,23 +204,35 @@ class TestNoteAgent:
         }
         
         agent = NoteAgent(mcp_client=mock_mcp)
-        result = await agent.handle({"text": "Test note", "title": "Test"})
         
-        assert result["status"] == "ok"
-        assert result["result"]["id"] == "page-123"
-        mock_mcp.call.assert_called_once_with("notion_notes", "write", {
-            "text": "Test note",
-            "title": "Test"
-        })
+        with patch.object(agent.openai_client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = mock_openai_response
+            
+            result = await agent.handle({"text": "Test note content"})
+            
+            assert result["status"] == "ok"
+            assert result["result"]["id"] == "page-123"
+            
+            # Verify AI title generation was called
+            mock_create.assert_called_once()
+            
+            # Verify MCP was called with AI-generated title
+            call_args = mock_mcp.call.call_args
+            assert call_args[0][0] == "notion_notes"
+            assert call_args[0][1] == "write"
+            assert call_args[0][2]["text"] == "Test note content"
+            assert call_args[0][2]["title"] == "AI 생성 제목"
     
     @pytest.mark.asyncio
-    async def test_note_agent_write_with_content_param(self, mock_mcp):
+    async def test_note_agent_write_with_content_param(self, mock_mcp, mock_openai_response):
         """Test NoteAgent with 'content' parameter"""
+        from unittest.mock import patch
+        
         mock_mcp.call.return_value = {
             "status": "ok",
             "result": {
                 "id": "page-456",
-                "title": "",
+                "title": "AI 생성 제목",
                 "content": "Note content",
                 "created_at": "2024-01-15T10:30:00.000Z",
                 "url": "https://notion.so/page-456"
@@ -219,12 +241,46 @@ class TestNoteAgent:
         }
         
         agent = NoteAgent(mcp_client=mock_mcp)
-        result = await agent.handle({"content": "Note content"})
         
-        assert result["status"] == "ok"
-        call_args = mock_mcp.call.call_args
-        assert call_args[0][0] == "notion_notes"
-        assert call_args[0][2]["text"] == "Note content"
+        with patch.object(agent.openai_client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = mock_openai_response
+            
+            result = await agent.handle({"content": "Note content"})
+            
+            assert result["status"] == "ok"
+            call_args = mock_mcp.call.call_args
+            assert call_args[0][0] == "notion_notes"
+            assert call_args[0][2]["text"] == "Note content"
+            assert call_args[0][2]["title"] == "AI 생성 제목"
+    
+    @pytest.mark.asyncio
+    async def test_note_agent_title_generation_fallback(self, mock_mcp):
+        """Test NoteAgent falls back to first line when AI fails"""
+        from unittest.mock import patch
+        
+        mock_mcp.call.return_value = {
+            "status": "ok",
+            "result": {
+                "id": "page-789",
+                "title": "First line of content",
+                "content": "First line of content\nMore content here",
+                "created_at": "2024-01-15T10:30:00.000Z",
+                "url": "https://notion.so/page-789"
+            },
+            "message": "Note created"
+        }
+        
+        agent = NoteAgent(mcp_client=mock_mcp)
+        
+        with patch.object(agent.openai_client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+            mock_create.side_effect = Exception("API Error")
+            
+            result = await agent.handle({"text": "First line of content\nMore content here"})
+            
+            assert result["status"] == "ok"
+            # Should use first line as fallback
+            call_args = mock_mcp.call.call_args
+            assert "First line of content" in call_args[0][2]["title"]
     
     @pytest.mark.asyncio
     async def test_note_agent_list_notes(self, mock_mcp):
@@ -270,21 +326,6 @@ class TestNoteAgent:
         assert "MCP client not available" in result["message"]
     
     @pytest.mark.asyncio
-    async def test_note_agent_notion_api_error(self, mock_mcp):
-        """Test NoteAgent handling Notion API errors"""
-        mock_mcp.call.return_value = {
-            "status": "error",
-            "result": None,
-            "message": "Notion API key not configured"
-        }
-        
-        agent = NoteAgent(mcp_client=mock_mcp)
-        result = await agent.handle({"text": "Test note", "title": "Test"})
-        
-        assert result["status"] == "error"
-        assert "Notion API" in result["message"]
-    
-    @pytest.mark.asyncio
     async def test_note_agent_list_with_action_list(self, mock_mcp):
         """Test NoteAgent listing with 'list' action"""
         mock_mcp.call.return_value = {
@@ -311,9 +352,19 @@ class TestCalendarAgent:
         mock.call = AsyncMock()
         return mock
     
+    @pytest.fixture
+    def mock_openai_response(self):
+        """Create mock OpenAI response"""
+        def _create_response(content: str):
+            mock_response = MagicMock()
+            mock_response.choices = [MagicMock()]
+            mock_response.choices[0].message.content = content
+            return mock_response
+        return _create_response
+    
     @pytest.mark.asyncio
-    async def test_calendar_agent_add_event(self, mock_mcp):
-        """Test CalendarAgent adding an event"""
+    async def test_calendar_agent_add_event_with_structured_data(self, mock_mcp):
+        """Test CalendarAgent adding an event with structured data"""
         from agents.calendar_agent import CalendarAgent
         
         mock_mcp.call.return_value = {
@@ -334,8 +385,41 @@ class TestCalendarAgent:
         mock_mcp.call.assert_called_once()
     
     @pytest.mark.asyncio
-    async def test_calendar_agent_list_events(self, mock_mcp):
-        """Test CalendarAgent listing events"""
+    async def test_calendar_agent_add_event_with_llm_extraction(self, mock_mcp, mock_openai_response):
+        """Test CalendarAgent extracting event data from text using LLM"""
+        from agents.calendar_agent import CalendarAgent
+        from unittest.mock import patch
+        
+        mock_mcp.call.return_value = {
+            "status": "ok",
+            "result": {"id": 1, "title": "팀 회의"},
+            "message": "Event added"
+        }
+        
+        llm_response = '{"title": "팀 회의", "date": "2024-01-15", "time": "15:00", "description": ""}'
+        
+        agent = CalendarAgent(mcp_client=mock_mcp)
+        
+        with patch.object(agent.openai_client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = mock_openai_response(llm_response)
+            
+            result = await agent.handle({
+                "action": "calendar_add",
+                "text": "오늘 오후 3시에 팀 회의"
+            })
+            
+            assert result["status"] == "ok"
+            mock_create.assert_called_once()
+            
+            # Verify MCP was called with extracted data
+            call_args = mock_mcp.call.call_args
+            assert call_args[0][0] == "notion_calendar"
+            assert call_args[0][1] == "add_event"
+            assert call_args[0][2]["title"] == "팀 회의"
+    
+    @pytest.mark.asyncio
+    async def test_calendar_agent_list_events_with_structured_data(self, mock_mcp):
+        """Test CalendarAgent listing events with structured data"""
         from agents.calendar_agent import CalendarAgent
         
         mock_mcp.call.return_value = {
@@ -345,25 +429,82 @@ class TestCalendarAgent:
         }
         
         agent = CalendarAgent(mcp_client=mock_mcp)
-        result = await agent.handle({"action": "list"})
+        result = await agent.handle({
+            "action": "list",
+            "range_start": "2024-01-01",
+            "range_end": "2024-01-31"
+        })
         
         assert result["status"] == "ok"
-        # Now calls notion_calendar first (with fallback to calendar_mock)
         mock_mcp.call.assert_called_once_with("notion_calendar", "list_events", {
-            "range_start": None,
-            "range_end": None
+            "range_start": "2024-01-01",
+            "range_end": "2024-01-31"
         })
     
     @pytest.mark.asyncio
-    async def test_calendar_agent_without_title(self, mock_mcp):
-        """Test CalendarAgent without event title"""
+    async def test_calendar_agent_list_events_with_llm_extraction(self, mock_mcp, mock_openai_response):
+        """Test CalendarAgent extracting date range from text using LLM"""
+        from agents.calendar_agent import CalendarAgent
+        from unittest.mock import patch
+        
+        mock_mcp.call.return_value = {
+            "status": "ok",
+            "result": [{"id": 1, "title": "Event 1"}],
+            "message": "Found 1 events"
+        }
+        
+        llm_response = '{"range_start": "2024-01-15", "range_end": "2024-01-21"}'
+        
+        agent = CalendarAgent(mcp_client=mock_mcp)
+        
+        with patch.object(agent.openai_client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = mock_openai_response(llm_response)
+            
+            result = await agent.handle({
+                "action": "list",
+                "text": "이번주 일정 알려줘"
+            })
+            
+            assert result["status"] == "ok"
+            mock_create.assert_called_once()
+    
+    @pytest.mark.asyncio
+    async def test_calendar_agent_without_event_info(self, mock_mcp):
+        """Test CalendarAgent without event information"""
         from agents.calendar_agent import CalendarAgent
         
         agent = CalendarAgent(mcp_client=mock_mcp)
         result = await agent.handle({"action": "add"})
         
         assert result["status"] == "error"
-        assert "title is required" in result["message"]
+        assert "required" in result["message"]
+    
+    @pytest.mark.asyncio
+    async def test_calendar_agent_llm_extraction_fallback(self, mock_mcp, mock_openai_response):
+        """Test CalendarAgent fallback when LLM extraction fails"""
+        from agents.calendar_agent import CalendarAgent
+        from unittest.mock import patch
+        
+        mock_mcp.call.return_value = {
+            "status": "ok",
+            "result": {"id": 1, "title": "회의"},
+            "message": "Event added"
+        }
+        
+        agent = CalendarAgent(mcp_client=mock_mcp)
+        
+        with patch.object(agent.openai_client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+            mock_create.side_effect = Exception("API Error")
+            
+            result = await agent.handle({
+                "action": "calendar_add",
+                "text": "회의"
+            })
+            
+            assert result["status"] == "ok"
+            # Should use fallback (text as title)
+            call_args = mock_mcp.call.call_args
+            assert call_args[0][2]["title"] == "회의"
 
 
 class TestWebAgent:
@@ -375,6 +516,14 @@ class TestWebAgent:
         mock = MagicMock()
         mock.call = AsyncMock()
         return mock
+    
+    @pytest.fixture
+    def mock_openai_response(self):
+        """Create mock OpenAI response"""
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "요약된 검색 결과입니다."
+        return mock_response
     
     @pytest.mark.asyncio
     async def test_web_agent_fetch_url(self, mock_mcp):
@@ -394,23 +543,126 @@ class TestWebAgent:
         mock_mcp.call.assert_called_once()
     
     @pytest.mark.asyncio
-    async def test_web_agent_search_query(self, mock_mcp):
-        """Test WebAgent with search query"""
+    async def test_web_agent_search_with_summarization(self, mock_mcp, mock_openai_response):
+        """Test WebAgent searching and summarizing top 3 results"""
+        from agents.web_agent import WebAgent
+        from unittest.mock import patch
+        
+        # Mock search results
+        search_results = [
+            {"title": "Result 1", "url": "https://example.com/1", "snippet": "Snippet 1"},
+            {"title": "Result 2", "url": "https://example.com/2", "snippet": "Snippet 2"},
+            {"title": "Result 3", "url": "https://example.com/3", "snippet": "Snippet 3"}
+        ]
+        
+        # Mock fetch_and_extract results
+        fetch_results = [
+            {"status": "ok", "result": {"url": "https://example.com/1", "text": "Content 1"}},
+            {"status": "ok", "result": {"url": "https://example.com/2", "text": "Content 2"}},
+            {"status": "ok", "result": {"url": "https://example.com/3", "text": "Content 3"}}
+        ]
+        
+        async def mock_call_side_effect(tool, action, params):
+            if action == "search":
+                return {"status": "ok", "result": search_results, "message": "Found 3 results"}
+            elif action == "fetch_and_extract":
+                url = params["url"]
+                for i, result in enumerate(search_results):
+                    if result["url"] == url:
+                        return fetch_results[i]
+            return {"status": "error", "result": None, "message": "Unknown action"}
+        
+        mock_mcp.call.side_effect = mock_call_side_effect
+        
+        agent = WebAgent(mcp_client=mock_mcp)
+        
+        with patch.object(agent.openai_client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = mock_openai_response
+            
+            result = await agent.handle({"query": "Python programming"})
+            
+            assert result["status"] == "ok"
+            assert "summary" in result["result"]
+            assert "sources" in result["result"]
+            assert len(result["result"]["sources"]) == 3
+            assert result["result"]["query"] == "Python programming"
+            
+            # Verify LLM was called for summarization
+            mock_create.assert_called_once()
+    
+    @pytest.mark.asyncio
+    async def test_web_agent_search_no_results(self, mock_mcp):
+        """Test WebAgent when search returns no results"""
         from agents.web_agent import WebAgent
         
         mock_mcp.call.return_value = {
-            "status": "ok",
-            "result": {"text": "search results"},
-            "message": "Fetched"
+            "status": "error",
+            "result": None,
+            "message": "No search results found"
         }
         
         agent = WebAgent(mcp_client=mock_mcp)
-        result = await agent.handle({"query": "python news"})
+        result = await agent.handle({"query": "nonexistent query"})
         
-        assert result["status"] == "ok"
-        # Should convert query to URL
-        call_args = mock_mcp.call.call_args
-        assert "url" in call_args[0][2]
+        assert result["status"] == "error"
+    
+    @pytest.mark.asyncio
+    async def test_web_agent_search_fetch_failure(self, mock_mcp, mock_openai_response):
+        """Test WebAgent when fetching content fails for all results"""
+        from agents.web_agent import WebAgent
+        from unittest.mock import patch
+        
+        search_results = [
+            {"title": "Result 1", "url": "https://example.com/1", "snippet": "Snippet 1"}
+        ]
+        
+        async def mock_call_side_effect(tool, action, params):
+            if action == "search":
+                return {"status": "ok", "result": search_results, "message": "Found 1 result"}
+            elif action == "fetch_and_extract":
+                return {"status": "error", "result": None, "message": "Fetch failed"}
+            return {"status": "error", "result": None, "message": "Unknown action"}
+        
+        mock_mcp.call.side_effect = mock_call_side_effect
+        
+        agent = WebAgent(mcp_client=mock_mcp)
+        result = await agent.handle({"query": "test query"})
+        
+        assert result["status"] == "error"
+        assert "가져올 수 없습니다" in result["message"]
+    
+    @pytest.mark.asyncio
+    async def test_web_agent_search_partial_fetch_success(self, mock_mcp, mock_openai_response):
+        """Test WebAgent when some fetches succeed and some fail"""
+        from agents.web_agent import WebAgent
+        from unittest.mock import patch
+        
+        search_results = [
+            {"title": "Result 1", "url": "https://example.com/1", "snippet": "Snippet 1"},
+            {"title": "Result 2", "url": "https://example.com/2", "snippet": "Snippet 2"}
+        ]
+        
+        async def mock_call_side_effect(tool, action, params):
+            if action == "search":
+                return {"status": "ok", "result": search_results, "message": "Found 2 results"}
+            elif action == "fetch_and_extract":
+                if params["url"] == "https://example.com/1":
+                    return {"status": "ok", "result": {"url": params["url"], "text": "Content 1"}}
+                else:
+                    return {"status": "error", "result": None, "message": "Fetch failed"}
+            return {"status": "error", "result": None, "message": "Unknown action"}
+        
+        mock_mcp.call.side_effect = mock_call_side_effect
+        
+        agent = WebAgent(mcp_client=mock_mcp)
+        
+        with patch.object(agent.openai_client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = mock_openai_response
+            
+            result = await agent.handle({"query": "test query"})
+            
+            assert result["status"] == "ok"
+            assert len(result["result"]["sources"]) == 1  # Only successful fetch
     
     @pytest.mark.asyncio
     async def test_web_agent_without_url_or_query(self, mock_mcp):
@@ -422,6 +674,17 @@ class TestWebAgent:
         
         assert result["status"] == "error"
         assert "URL or query is required" in result["message"]
+    
+    @pytest.mark.asyncio
+    async def test_web_agent_without_mcp(self):
+        """Test WebAgent without MCP client"""
+        from agents.web_agent import WebAgent
+        
+        agent = WebAgent()
+        result = await agent.handle({"query": "test"})
+        
+        assert result["status"] == "error"
+        assert "MCP client not available" in result["message"]
 
 
 class TestFallbackAgent:

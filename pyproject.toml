@@ -5,6 +5,7 @@ description = "AI Personal Assistant - LLM-powered assistant with MCP integratio
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "beautifulsoup4>=4.14.2",
     "httpx>=0.28.1",
     "loguru>=0.7.3",
     "mcp>=1.21.2",

@@ -117,9 +117,3 @@ class TestNotionCalendar:
         # Test absolute date
         date = _parse_relative_date("2024-01-01")
         assert date == "2024-01-01"
-
-
-class TestCalendarAgentWithNotion:
-    """Test CalendarAgent with Notion integration"""
-    
-
