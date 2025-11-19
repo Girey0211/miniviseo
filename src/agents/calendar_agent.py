@@ -176,7 +176,7 @@ Rules:
         - calendar_add: Add a new event
         
         Args:
-            params: Dictionary with raw text or structured event details
+            params: Dictionary with raw text, structured event details, or previous_results
             
         Returns:
             Dictionary with status, result, and message
@@ -193,16 +193,51 @@ Rules:
                 # Add event - extract data from raw input using LLM
                 raw_text = params.get("text") or params.get("raw_text", "")
                 
+                # Check if there are previous results to incorporate (e.g., web search results)
+                previous_results = params.get("previous_results", [])
+                additional_info = ""
+                
+                if previous_results:
+                    for prev in previous_results:
+                        prev_result = prev.get("result", {})
+                        if prev_result.get("status") == "ok":
+                            prev_data = prev_result.get("result", "")
+                            
+                            # Handle different result formats
+                            if isinstance(prev_data, str):
+                                additional_info = prev_data
+                                break
+                            elif isinstance(prev_data, dict):
+                                # For web search results with summary
+                                if "summary" in prev_data:
+                                    additional_info = prev_data["summary"]
+                                    # Optionally add sources
+                                    if "sources" in prev_data:
+                                        sources_text = "\n\n참고 링크:\n"
+                                        for source in prev_data["sources"]:
+                                            sources_text += f"- {source['title']}: {source['url']}\n"
+                                        additional_info += sources_text
+                                    break
+                                else:
+                                    additional_info = str(prev_data)
+                                    break
+                
                 # If structured data already provided, use it; otherwise extract from text
                 if params.get("title"):
                     event_data = {
                         "title": params.get("title", ""),
                         "date": params.get("date", ""),
                         "time": params.get("time", ""),
-                        "description": params.get("description", "")
+                        "description": params.get("description", "") or additional_info
                     }
                 elif raw_text:
                     event_data = await self._extract_event_data(raw_text)
+                    # Append additional info from previous results to description
+                    if additional_info:
+                        if event_data.get("description"):
+                            event_data["description"] = f"{event_data['description']}\n\n{additional_info}"
+                        else:
+                            event_data["description"] = additional_info
                 else:
                     return self._create_error_response("Event information is required")
                 

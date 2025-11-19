@@ -66,7 +66,7 @@ class NoteAgent(AgentBase):
         - list_notes: List all notes from Notion
         
         Args:
-            params: Dictionary with 'text', 'content', 'title', or 'action'
+            params: Dictionary with 'text', 'content', 'title', 'action', or 'previous_results'
             
         Returns:
             Dictionary with status, result, and message
@@ -85,6 +85,34 @@ class NoteAgent(AgentBase):
             else:
                 # Write note to Notion (default)
                 text = params.get("text") or params.get("content", "")
+                
+                # Check if there are previous results to incorporate
+                previous_results = params.get("previous_results", [])
+                if previous_results and not text:
+                    # Extract content from previous results (e.g., web search results)
+                    for prev in previous_results:
+                        prev_result = prev.get("result", {})
+                        if prev_result.get("status") == "ok":
+                            prev_data = prev_result.get("result", "")
+                            
+                            # Handle different result formats
+                            if isinstance(prev_data, str):
+                                text = prev_data
+                                break
+                            elif isinstance(prev_data, dict):
+                                # For web search results with summary
+                                if "summary" in prev_data:
+                                    text = prev_data["summary"]
+                                    # Optionally add sources
+                                    if "sources" in prev_data:
+                                        sources_text = "\n\n참고 링크:\n"
+                                        for source in prev_data["sources"]:
+                                            sources_text += f"- {source['title']}: {source['url']}\n"
+                                        text += sources_text
+                                    break
+                                else:
+                                    text = str(prev_data)
+                                    break
                 
                 if not text:
                     return self._create_error_response("Note text is required")

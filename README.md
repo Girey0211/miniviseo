@@ -398,7 +398,11 @@ NOTION_NOTES_DATABASE_ID=your_notes_database_id
 - **"안녕, 내일 3시에 밥을 먹을거라 부산역 주변 맛집 찾아서 일정 만들어"**
   1. 인사 응답 (FallbackAgent)
   2. 부산역 주변 맛집 검색 (WebAgent)
-  3. 내일 3시 일정 추가 (CalendarAgent)
+  3. 내일 3시 일정 추가 - 검색 결과가 일정 설명에 자동 포함 (CalendarAgent)
+
+- **"부산 맛집 찾아서 메모 남겨"**
+  1. 부산 맛집 검색 (WebAgent)
+  2. 검색 결과를 메모로 저장 - 참고 링크 포함 (NoteAgent)
 
 - **"파이썬 최신 뉴스 검색하고 메모해줘"**
   1. 파이썬 뉴스 검색 (WebAgent)
@@ -407,6 +411,8 @@ NOTION_NOTES_DATABASE_ID=your_notes_database_id
 - **"이번주 일정 보여주고, 내일 오전 10시에 회의 추가해줘"**
   1. 이번주 일정 조회 (CalendarAgent)
   2. 내일 오전 10시 회의 추가 (CalendarAgent)
+
+**컨텍스트 전달**: 이전 액션의 결과가 다음 액션에 자동으로 전달됩니다. 예를 들어 웹 검색 결과가 메모나 일정의 내용으로 사용됩니다.
 
 ## 프로젝트 구조
 
