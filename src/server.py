@@ -145,9 +145,28 @@ app = FastAPI(
     - **세션 ID 형식**: 자유롭게 지정 가능 (예: "user-123", "session-abc-def")
     
     ### 세션 관리 API
-    - `GET /sessions/{session_id}` - 세션 정보 조회
+    - `GET /sessions/{session_id}` - 세션 정보 및 대화 히스토리 조회
+      - `?limit=N` 파라미터로 메시지 수 제한 (기본 50, 최대 100)
     - `DELETE /sessions/{session_id}` - 세션 삭제
     - `GET /sessions-stats` - 전체 세션 통계
+    
+    ### 대화 히스토리 조회 예시
+    ```
+    GET /sessions/user-123
+    GET /sessions/user-123?limit=20
+    ```
+    
+    **응답 예시:**
+    ```json
+    {
+      "session_id": "user-123",
+      "message_count": 10,
+      "messages": [
+        {"role": "user", "content": "안녕하세요", "timestamp": "..."},
+        {"role": "assistant", "content": "안녕하세요!", "timestamp": "..."}
+      ]
+    }
+    ```
     """,
     version="0.1.0",
     lifespan=lifespan,
